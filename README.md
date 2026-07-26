@@ -109,6 +109,29 @@ under `paper/generated_tables/`. Archive `artifacts/runs`, `artifacts/compute_re
 the generated table/figure directories, `DIAGNOSTIC_VERDICT.md`, and the Git commit SHA
 together to preserve reproducibility.
 
+## CLI coverage
+
+The currently exposed CLI surface is:
+
+```text
+doctor
+doctor memory
+smoke
+data download {aircraft,cub}
+paper build-all
+```
+
+Every command and nested `--help` path is covered by `tests/integration/test_cli.py`.
+Download dispatch is tested without downloading multi-gigabyte archives; official URLs
+and dataset checksums are exercised by the downloader when the user invokes it.
+
+The larger command surface from the research specification—`references inspect`, data
+preparation for Cars/ImageNet-100, Stages 0–5 training, gain collection, router training,
+diagnosis, audits, GCD evaluation, and efficiency evaluation—is not exposed yet. Those
+commands depend on real-data and official-method integrations that remain incomplete.
+Attempting to use them produces an argparse “invalid choice” error rather than silently
+running a substitute implementation.
+
 ## Scientific execution order
 
 Follow `PLAN.md`: implement and pass M1–M4 gates, run CUB seed 0, warm up detail tokens,

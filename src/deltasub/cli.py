@@ -3,13 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import sys
 from pathlib import Path
 
 import pandas as pd
 import torch
 import yaml
 
-from .data.download import download
+from .data.download import OFFICIAL, download
 from .reporting.tables import summarize_runs, write_formats
 from .training.smoke_pipeline import run_smoke_pipeline
 
@@ -55,6 +56,13 @@ def memory_doctor(output: Path) -> dict:
     return result
 
 
+def _existing_file(value: str) -> Path:
+    path = Path(value)
+    if not path.is_file():
+        raise FileNotFoundError(f"required file does not exist: {path}")
+    return path
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="deltasub")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -73,7 +81,7 @@ def build_parser() -> argparse.ArgumentParser:
     data = sub.add_parser("data")
     data_sub = data.add_subparsers(dest="data_command", required=True)
     download_parser = data_sub.add_parser("download")
-    download_parser.add_argument("dataset")
+    download_parser.add_argument("dataset", choices=sorted(OFFICIAL))
     download_parser.add_argument("--root", required=True)
     paper = sub.add_parser("paper")
     paper_sub = paper.add_subparsers(dest="paper_command", required=True)
@@ -86,7 +94,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "doctor":
-        result = memory_doctor(Path(args.output)) if args.doctor_command == "memory" else doctor()
+        if args.doctor_command == "memory":
+            if args.config:
+                _existing_file(args.config)
+            if args.hardware:
+                _existing_file(args.hardware)
+            result = memory_doctor(Path(args.output))
+        else:
+            result = doctor()
     elif args.command == "smoke":
         result = run_smoke_pipeline(args.output, size=args.size, seed=args.seed, device=args.device, resume=args.resume)
     elif args.command == "data":
@@ -97,10 +112,16 @@ def main(argv=None) -> int:
             value = json.loads(path.read_text())
             if value.get("synthetic_only"):
                 continue
-            value.update(method=path.parent.name, dataset="unknown", seed=0)
+            value.setdefault("method", path.parent.name)
+            value.setdefault("dataset", "unknown")
+            value.setdefault("seed", 0)
             records.append(value)
         if not records:
-            raise SystemExit("no non-synthetic completed runs found; synthetic smoke metrics are excluded")
+            print(
+                "no non-synthetic completed runs found; synthetic smoke metrics are excluded",
+                file=sys.stderr,
+            )
+            return 2
         summary = summarize_runs(pd.DataFrame(records))
         result = {"outputs": [str(p) for p in write_formats(summary, Path(args.output) / "generated_tables/results")]}
     else:

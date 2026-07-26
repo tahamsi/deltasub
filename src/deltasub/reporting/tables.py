@@ -43,6 +43,16 @@ def write_formats(frame: pd.DataFrame, stem: str | Path) -> list[Path]:
     stem.parent.mkdir(parents=True, exist_ok=True)
     outputs = [stem.with_suffix(ext) for ext in (".csv", ".md", ".tex")]
     frame.to_csv(outputs[0], index=False)
-    outputs[1].write_text(frame.to_markdown(index=False) + "\n", encoding="utf-8")
+    headers = [str(column).replace("|", "\\|") for column in frame.columns]
+    rows = [
+        [str(value).replace("|", "\\|") for value in row]
+        for row in frame.itertuples(index=False, name=None)
+    ]
+    markdown = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join("---" for _ in headers) + " |",
+        *["| " + " | ".join(row) + " |" for row in rows],
+    ]
+    outputs[1].write_text("\n".join(markdown) + "\n", encoding="utf-8")
     outputs[2].write_text(frame.to_latex(index=False), encoding="utf-8")
     return outputs
