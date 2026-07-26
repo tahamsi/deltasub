@@ -4,6 +4,10 @@ Status date: 2026-07-26. Shared synthetic infrastructure has been implemented an
 but no publication baseline has been completed or run. No benchmark results are claimed.
 Pinned details are recorded in `third_party/manifest.yaml`.
 
+M1 data foundations are complete and covered by local synthetic filesystem fixtures.
+No real dataset, SSB/SelEx split file, or resulting benchmark manifest is present, so all
+real-data validation outcomes remain pending. M2 model/baseline work has not started.
+
 | Required name | Upstream status | Original protocol | Planned integration | Current status | Principal incompatibility / risk |
 |---|---|---|---|---|---|
 | ViT / DINOv2 + SelEx | Official DINOv2 and SelEx code available | Fine-grained GCD for SelEx; DINOv2 backbone | Official components in common harness | Not started | Per-anchor SelEx refactor must exactly preserve scalar reduction |

@@ -32,6 +32,16 @@ class CLITests(unittest.TestCase):
             ["smoke", "--help"],
             ["data", "--help"],
             ["data", "download", "--help"],
+            ["data", "prepare", "--help"],
+            ["data", "prepare", "cub", "--help"],
+            ["data", "prepare", "aircraft", "--help"],
+            ["data", "prepare", "cars", "--help"],
+            ["data", "prepare", "cifar10", "--help"],
+            ["data", "prepare", "imagenet100", "--help"],
+            ["data", "validate", "--help"],
+            ["data", "validate-all", "--help"],
+            ["references", "--help"],
+            ["references", "inspect", "--help"],
             ["paper", "--help"],
             ["paper", "build-all", "--help"],
         ]
@@ -109,6 +119,23 @@ class CLITests(unittest.TestCase):
             code, _, error = self.invoke(["data", "download", "imagenet100", "--root", directory])
             self.assertEqual(code, 2)
             self.assertIn("invalid choice", error)
+
+    def test_references_inspect_and_data_failures(self):
+        code, text, _ = self.invoke(["references", "inspect"])
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            {item["id"] for item in json.loads(text)["references"]},
+            {"selex", "generalized_category_discovery"},
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            code, _, error = self.invoke(["data", "prepare", "cub", "--root", directory])
+            self.assertEqual(code, 2)
+            self.assertIn("source checksum is unavailable", error)
+            code, _, error = self.invoke(
+                ["data", "validate", "cub", "--root", directory]
+            )
+            self.assertEqual(code, 2)
+            self.assertIn("manifest does not exist", error)
 
     def test_paper_build_all_writes_three_formats(self):
         with tempfile.TemporaryDirectory() as directory:

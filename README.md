@@ -56,7 +56,9 @@ The measured recommendations are written to `artifacts/hardware_profile.yaml`.
 Before real research training, supply:
 
 1. Legally obtained CUB, FGVC-Aircraft, and Stanford Cars data.
-2. Exact SelEx/SSB class-split files pinned to the inspected upstream revision.
+2. Exact SelEx/SSB class-split files from the pinned local upstream checkout. JSON,
+   YAML, and trusted pinned pickle formats are supported; their SHA256 and provenance
+   are recorded in `split_validation.json`.
 3. The official DINOv2 ViT-B/14 checkpoint and recorded SHA256.
 4. A completed exact integration of the upstream SelEx objective whose per-anchor mean
    passes the scalar-equivalence test.
@@ -109,6 +111,39 @@ under `paper/generated_tables/`. Archive `artifacts/runs`, `artifacts/compute_re
 the generated table/figure directories, `DIAGNOSTIC_VERDICT.md`, and the Git commit SHA
 together to preserve reproducibility.
 
+## M1 data manifests
+
+The M1 manifest schema is versioned and requires sample identity, dataset/path, original
+class ID/name, known/novel and labelled/unlabelled assignments, train/test membership,
+optional bounding boxes, source archive SHA256, and exact split provenance. JSONL records
+are sorted canonically before serialization, so repeated preparation from the same data,
+split file, and configuration produces the same bytes and checksum.
+
+Preparation is local-only. CUB and Aircraft retain their explicit official download
+command, Cars requires `--source manual`, and ImageNet-100 requires a licensed
+ImageNet-1K root and is never downloaded. CIFAR-10 binary batches are losslessly
+extracted to local PPM files. Every preparation requires archive checksum provenance and
+an exact local split file; absent inputs fail with an actionable error.
+
+Example command surface:
+
+```bash
+python -m deltasub.cli references inspect
+python -m deltasub.cli data prepare cub --root DATA --split-file SPLIT.json --archive CUB.tgz
+python -m deltasub.cli data prepare aircraft --root DATA --split-file SPLIT.pkl --archive AIRCRAFT.tar.gz
+python -m deltasub.cli data prepare cars --root DATA --source manual --split-file SPLIT.pkl --archive CARS.tgz
+python -m deltasub.cli data prepare cifar10 --root DATA --split-file SPLIT.json --archive CIFAR.tar.gz
+python -m deltasub.cli data prepare imagenet100 --root OUTPUT --imagenet-root IMAGENET \
+  --split-file SPLIT.json
+python -m deltasub.cli data validate cub --root DATA
+python -m deltasub.cli data validate-all --root DATASETS
+```
+
+For ImageNet-100, `OUTPUT/splits/imagenet100_wnids.txt` must additionally contain the
+exact 100 unique WNIDs from the pinned split source. A local
+`source_archive.sha256` may be used where the licensed source is already extracted.
+No real dataset counts or checksums are claimed by this repository.
+
 ## CLI coverage
 
 The currently exposed CLI surface is:
@@ -118,6 +153,10 @@ doctor
 doctor memory
 smoke
 data download {aircraft,cub}
+data prepare {aircraft,cars,cifar10,cub,imagenet100}
+data validate {aircraft,cars,cifar10,cub,imagenet100}
+data validate-all
+references inspect
 paper build-all
 ```
 
@@ -125,11 +164,9 @@ Every command and nested `--help` path is covered by `tests/integration/test_cli
 Download dispatch is tested without downloading multi-gigabyte archives; official URLs
 and dataset checksums are exercised by the downloader when the user invokes it.
 
-The larger command surface from the research specification—`references inspect`, data
-preparation for Cars/ImageNet-100, Stages 0–5 training, gain collection, router training,
-diagnosis, audits, GCD evaluation, and efficiency evaluation—is not exposed yet. Those
-commands depend on real-data and official-method integrations that remain incomplete.
-Attempting to use them produces an argparse “invalid choice” error rather than silently
+Stages 0–5 training, gain collection, router training, diagnosis, audits, GCD evaluation,
+and efficiency evaluation are not exposed. Those commands belong to later milestones;
+attempting to use them produces an argparse “invalid choice” error rather than silently
 running a substitute implementation.
 
 ## Scientific execution order

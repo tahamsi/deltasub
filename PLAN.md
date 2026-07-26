@@ -12,7 +12,7 @@ deterministic diagnostic.
 - [x] M0: inspect cited papers and repositories; record pinned upstream heads, licenses,
   protocols, incompatibilities, and unavailable code. Local provenance and documentation
   invariants are covered by `tests/unit/test_m0_provenance.py`.
-- [ ] M1: environment, CLI skeleton, deterministic dataset manifests, exact SSB/SelEx
+- [x] M1: environment, CLI skeleton, deterministic dataset manifests, exact SSB/SelEx
   split validation, and foundational unit tests.
 - [ ] M2: DINOv2/SelEx baseline, per-anchor SelEx decomposition, strict scalar-equivalence
   test.
@@ -63,12 +63,19 @@ geometry, loss decomposition, deterministic gain mechanics, sampling, routing, b
 checkpoint/resume, artifact schemas, and CPU/CUDA execution. It is not a SelEx or DINOv2
 reproduction and its metrics are excluded from paper aggregation.
 
-## Immediate next milestone: real-data M1/M2 integration
+## M1 completion
 
-Create the repository skeleton and locked environment; implement the unified CLI, data
-manifest schema/checksumming, legal download guards, deterministic split fixtures, and
-CPU tests. Exact SelEx/SSB split files must be pinned before asserting dataset counts or
-manifest hashes.
+M1 provides a versioned JSONL manifest, canonical ordering and SHA256 serialization,
+local parsers for CUB-200-2011, FGVC-Aircraft, Stanford Cars, CIFAR-10, and ImageNet-100,
+explicit Cars/ImageNet legal guards, pinned split-file provenance validation, and CPU
+fixture tests. No benchmark manifest has been generated: licensed datasets and the exact
+pinned upstream split files are not present in this repository.
+
+## Immediate next milestone: M2 (not started)
+
+M2 may begin only as a separate milestone. It must integrate official DINOv2 and SelEx
+components and demonstrate exact per-anchor/scalar equivalence; M1 does not claim either
+integration.
 
 ## Hard gates and stop rules
 

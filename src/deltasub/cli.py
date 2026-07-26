@@ -11,6 +11,7 @@ import torch
 import yaml
 
 from .data.download import OFFICIAL, download
+from .data.prepare import DATASET_ALIASES, prepare_dataset, validate_all, validate_dataset
 from .reporting.tables import summarize_runs, write_formats
 from .training.smoke_pipeline import run_smoke_pipeline
 
@@ -78,11 +79,38 @@ def build_parser() -> argparse.ArgumentParser:
     smoke.add_argument("--seed", type=int, default=0)
     smoke.add_argument("--device", default="cpu")
     smoke.add_argument("--resume", action="store_true")
+    references = sub.add_parser("references")
+    references_sub = references.add_subparsers(dest="references_command", required=True)
+    inspect = references_sub.add_parser("inspect")
+    inspect.add_argument("--manifest", default="third_party/manifest.yaml")
     data = sub.add_parser("data")
     data_sub = data.add_subparsers(dest="data_command", required=True)
     download_parser = data_sub.add_parser("download")
     download_parser.add_argument("dataset", choices=sorted(OFFICIAL))
     download_parser.add_argument("--root", required=True)
+    prepare = data_sub.add_parser("prepare")
+    prepare_sub = prepare.add_subparsers(dest="dataset", required=True)
+    for dataset in DATASET_ALIASES:
+        dataset_parser = prepare_sub.add_parser(dataset)
+        dataset_parser.add_argument("--root", required=True)
+        dataset_parser.add_argument("--split-file")
+        dataset_parser.add_argument(
+            "--split-revision",
+            default="831a645c3d09a68ec4633a45741025765bacf7e0",
+        )
+        dataset_parser.add_argument("--split-sha256")
+        dataset_parser.add_argument("--labelled-proportion", type=float, default=0.5)
+        dataset_parser.add_argument("--archive")
+        dataset_parser.add_argument("--archive-sha256")
+        if dataset == "cars":
+            dataset_parser.add_argument("--source", choices=["manual"], required=True)
+        if dataset == "imagenet100":
+            dataset_parser.add_argument("--imagenet-root", required=True)
+    validate = data_sub.add_parser("validate")
+    validate.add_argument("dataset", choices=sorted(DATASET_ALIASES))
+    validate.add_argument("--root", required=True)
+    validate_all_parser = data_sub.add_parser("validate-all")
+    validate_all_parser.add_argument("--root", required=True)
     paper = sub.add_parser("paper")
     paper_sub = paper.add_subparsers(dest="paper_command", required=True)
     build = paper_sub.add_parser("build-all")
@@ -104,8 +132,49 @@ def main(argv=None) -> int:
             result = doctor()
     elif args.command == "smoke":
         result = run_smoke_pipeline(args.output, size=args.size, seed=args.seed, device=args.device, resume=args.resume)
+    elif args.command == "references":
+        manifest_path = Path(args.manifest)
+        if not manifest_path.is_file():
+            raise FileNotFoundError(f"reference manifest does not exist: {manifest_path}")
+        manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+        selected = [
+            reference
+            for reference in manifest["references"]
+            if reference["id"] in {"selex", "generalized_category_discovery"}
+        ]
+        result = {
+            "manifest": str(manifest_path),
+            "schema_version": manifest["schema_version"],
+            "references": selected,
+            "local_split_files": [],
+            "split_status": "required_pinned_local_files_not_present",
+        }
     elif args.command == "data":
-        result = {"archive": str(download(args.dataset, args.root))}
+        try:
+            if args.data_command == "download":
+                result = {"archive": str(download(args.dataset, args.root))}
+            elif args.data_command == "prepare":
+                result = prepare_dataset(
+                    args.dataset,
+                    root=args.root,
+                    split_file=args.split_file,
+                    split_revision=args.split_revision,
+                    split_sha256=args.split_sha256,
+                    labelled_proportion=args.labelled_proportion,
+                    archive=args.archive,
+                    archive_sha256=args.archive_sha256,
+                    source=getattr(args, "source", None),
+                    imagenet_root=getattr(args, "imagenet_root", None),
+                )
+            elif args.data_command == "validate":
+                result = validate_dataset(args.dataset, args.root)
+            elif args.data_command == "validate-all":
+                result = validate_all(args.root)
+            else:
+                raise ValueError(f"unsupported data command: {args.data_command}")
+        except (FileNotFoundError, ValueError, OSError) as error:
+            print(f"data error: {error}", file=sys.stderr)
+            return 2
     elif args.command == "paper" and args.paper_command == "build-all":
         records = []
         for path in Path(args.runs).glob("*/metrics.json"):
