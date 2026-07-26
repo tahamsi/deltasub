@@ -1,0 +1,162 @@
+schema_version: 1
+inspected_at: "2026-07-26"
+policy:
+  vendor_code_by_default: false
+  preserve_license_notices: true
+  no_unlicensed_copying: true
+  pinned_commits_are: "remote HEADs observed at inspection time, not immutable releases"
+
+references:
+  - id: selex
+    paper: "https://arxiv.org/abs/2408.14371"
+    repository: "https://github.com/SarahRastegar/SelEx"
+    commit: "569ee7085e779999502bd73ea92240f3d32fc84d"
+    license: "MIT"
+    code_status: official
+    original_task: "fine-grained generalized category discovery"
+    original_backbone: "DINO-family ViT as configured upstream"
+    integration: official_integration
+    difficulty: high
+    notes: "Batch-dependent contrastive and hierarchical objectives require an exact per-anchor refactor."
+
+  - id: generalized_category_discovery
+    paper: "https://arxiv.org/abs/2201.02609"
+    repository: "https://github.com/sgvaze/generalized-category-discovery"
+    commit: "831a645c3d09a68ec4633a45741025765bacf7e0"
+    license: "MIT"
+    code_status: official
+    original_task: "generalized category discovery"
+    original_backbone: "DINO ViT-B/16 in the original workflow"
+    integration: official_integration
+    difficulty: medium
+    notes: "Use the v2 single-Hungarian-assignment evaluation and exact SSB splits."
+
+  - id: dinov2
+    paper: "https://arxiv.org/abs/2304.07193"
+    repository: "https://github.com/facebookresearch/dinov2"
+    commit: "7764ea0f912e53c92e82eb78a2a1631e92725fc8"
+    license: "Apache-2.0"
+    code_status: official
+    original_task: "self-supervised visual representation learning"
+    original_backbone: "ViT family; DeltaSub primary is ViT-B/14"
+    integration: official_integration
+    difficulty: medium
+    notes: "Primary ViT-B/14 geometry is patch size 14 and embedding dimension 768."
+
+  - id: vit
+    paper: "https://arxiv.org/abs/2010.11929"
+    repository: null
+    commit: null
+    license: null
+    code_status: paper_reference
+    original_task: "supervised image classification"
+    original_backbone: "Vision Transformer"
+    integration: reference_only
+    difficulty: low
+
+  - id: transfg
+    paper: "https://arxiv.org/abs/2103.07976"
+    repository: "https://github.com/TACJu/TransFG"
+    commit: "9336fba46a4ac8ed2e33072c5f74ab459b114e4a"
+    license: "MIT"
+    code_status: official
+    original_task: "supervised fine-grained classification"
+    original_backbone: "ImageNet-21K-pretrained ViT-B/16, typically 448x448"
+    integration: faithful_port_planned
+    difficulty: high
+    notes: "Common-protocol result must be named TransFG-GCD-Port."
+
+  - id: cf_vit
+    paper: "https://arxiv.org/abs/2203.03821"
+    repository: "https://github.com/ChenMnZ/CF-ViT"
+    commit: "84a05ddaccfce646973a6bbe1fff6c4575761d6c"
+    license: "Apache-2.0"
+    code_status: official
+    original_task: "ImageNet classification with coarse-to-fine dynamic inference"
+    original_backbone: "LV-ViT/DeiT-family configurations"
+    integration: port_feasibility_pending
+    difficulty: high
+
+  - id: lf_vit
+    paper: "https://arxiv.org/abs/2402.00033"
+    repository: "https://github.com/edgeai1/LF-ViT"
+    commit: "1b44ff3372f4037cf96124c20dad3348575adb1b"
+    license: "NOASSERTION"
+    code_status: official_but_unlicensed
+    original_task: "ImageNet classification with localization and focus stages"
+    original_backbone: "DeiT-S"
+    integration: unavailable
+    difficulty: high
+    notes: "No root LICENSE was present; do not copy/adapt source until licensing is clarified."
+
+  - id: msvit
+    paper: "https://arxiv.org/abs/2307.02321"
+    repository: "https://github.com/qualcomm-ai-research/batchshaping"
+    commit: "483c2bc76cb215a489594be6009f06ad144c675f"
+    license: "BSD-3-Clause-like Qualcomm license; no patent license granted"
+    code_status: partial_official_utility
+    original_task: "dynamic mixed-scale tokenization for classification and segmentation"
+    original_backbone: "ViT variants"
+    integration: clean_room_reimplementation
+    difficulty: very_high
+    notes: "Repository contains batch-shaping losses/notebooks, not a complete end-to-end MSViT."
+
+  - id: dart
+    paper: "https://arxiv.org/abs/2506.10390"
+    repository: "https://github.com/HCPLab-SYSU/DART"
+    commit: "df9e34ded12f3d7813b5004eccf922a67fb8491f"
+    license: "Apache-2.0"
+    code_status: official
+    original_task: "adaptive tokenization for classification, dense prediction, and video"
+    original_backbone: "DeiT, Vim, VideoMamba and related models"
+    integration: faithful_port_planned
+    difficulty: high
+    notes: "Root LICENSE is Apache-2.0 although README advertises MIT; retain this discrepancy."
+
+  - id: sata
+    paper: "https://arxiv.org/abs/2409.19850"
+    repository: "https://github.com/nick-nikzad/SATA"
+    commit: null
+    license: null
+    code_status: unavailable
+    original_task: "robust image classification via spatial-autocorrelation token splitting/grouping"
+    original_backbone: "DeiT/ViT variants"
+    integration: unavailable
+    difficulty: blocked
+    notes: "Git remote and GitHub API lookup failed on 2026-07-26. Treat as token processing, not subdivision."
+
+  - id: spiralfovea
+    paper: "https://arxiv.org/abs/2607.00780"
+    repository: null
+    commit: null
+    license: null
+    code_status: paper_only_no_verified_repository
+    original_task: "fine-grained recognition with entropy-driven input-adaptive foveated tokenization"
+    original_backbone: "multiple ViT backbones"
+    integration: clean_room_reimplementation
+    difficulty: very_high
+    notes: "Changes token identity, location, scale, and grid rather than appending residual details."
+
+  - id: arta
+    paper: "https://arxiv.org/abs/2603.26258"
+    repository: null
+    commit: null
+    license: null
+    code_status: paper_only_no_verified_repository
+    original_task: "efficient dense feature extraction and semantic segmentation"
+    original_backbone: "mixed-resolution vision transformer"
+    integration: classification_port_feasibility_pending
+    difficulty: very_high
+    notes: "Boundary-driven allocator may not transfer defensibly to classification/GCD."
+
+  - id: subvit
+    paper: "https://arxiv.org/abs/2607.09086"
+    repository: null
+    commit: null
+    license: null
+    code_status: paper_only_no_verified_repository
+    original_task: "fine-grained recognition and generalized category discovery"
+    original_backbone: "DINOv2 ViT"
+    integration: clean_room_reimplementation
+    difficulty: very_high
+    notes: "Implement from paper only and label SubViT-Reimplementation."
