@@ -1,6 +1,7 @@
 # Baseline status
 
-Status date: 2026-07-26. No baseline has been implemented or run. No results are claimed.
+Status date: 2026-07-26. Shared synthetic infrastructure has been implemented and tested,
+but no publication baseline has been completed or run. No benchmark results are claimed.
 Pinned details are recorded in `third_party/manifest.yaml`.
 
 | Required name | Upstream status | Original protocol | Planned integration | Current status | Principal incompatibility / risk |

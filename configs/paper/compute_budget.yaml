@@ -1,0 +1,9 @@
+maximum_total_gpu_hours: 1000
+maximum_gpu_hours_per_method: 150
+maximum_failed_retries: 2
+maximum_audit_size: 1000
+maximum_ablation_jobs: 64
+checkpoint_frequency_steps: 500
+early_stopping:
+  patience: 10
+  minimum_delta: 0.0001

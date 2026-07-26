@@ -1,0 +1,11 @@
+schema_version: 1
+dataset: cub
+backbone: dinov2_vitb14
+input_size: 224
+patch_size: 14
+tier: diagnostic
+seed: 0
+candidates: 4
+random_candidates: 2
+k_bins: [0, 1, 2, 4, 8, 16, 32]
+synthetic: false

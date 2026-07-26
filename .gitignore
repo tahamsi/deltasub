@@ -3,3 +3,9 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+*.egg-info/
+artifacts/hardware_profile*.yaml
+artifacts/runs/
+artifacts/gain_cache/
+artifacts/audits/
+artifacts/logs/

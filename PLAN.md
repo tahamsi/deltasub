@@ -56,7 +56,14 @@ deterministic diagnostic.
 8. DART's root `LICENSE` is Apache-2.0, while its README says MIT. The root license is
    treated as authoritative and the discrepancy is retained as a provenance warning.
 
-## Immediate next milestone: M1
+## Implemented validation scaffold
+
+The repository now includes a dependency-light synthetic pipeline used only to test
+geometry, loss decomposition, deterministic gain mechanics, sampling, routing, budgeting,
+checkpoint/resume, artifact schemas, and CPU/CUDA execution. It is not a SelEx or DINOv2
+reproduction and its metrics are excluded from paper aggregation.
+
+## Immediate next milestone: real-data M1/M2 integration
 
 Create the repository skeleton and locked environment; implement the unified CLI, data
 manifest schema/checksumming, legal download guards, deterministic split fixtures, and

@@ -1,0 +1,20 @@
+hardware:
+  device: cuda:0
+  distributed: false
+  precision: bf16
+  amp: true
+  compile: false
+  activation_checkpointing: true
+  gpu_memory_limit_fraction: 0.90
+training:
+  physical_batch_size: 32
+  gradient_accumulation_steps: 4
+  effective_batch_size: 128
+  num_workers: 12
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 2
+gain_collection:
+  candidate_microbatch: 2
+  deterministic: true
+  resume: true

@@ -1,0 +1,6 @@
+schema_version: 1
+synthetic: true
+samples: 8
+classes: 4
+device: cpu
+seed: 0

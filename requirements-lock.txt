@@ -1,0 +1,9 @@
+# Minimum reproducible dependency set. Exact environment versions are captured per run.
+numpy==2.2.6
+pandas==2.3.3
+pyarrow==23.0.1
+PyYAML==6.0.2
+scikit-learn==1.7.1
+scipy==1.15.3
+torch==2.12.0
+pytest==9.0.3
