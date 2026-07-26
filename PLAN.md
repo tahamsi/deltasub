@@ -14,8 +14,8 @@ deterministic diagnostic.
   invariants are covered by `tests/unit/test_m0_provenance.py`.
 - [x] M1: environment, CLI skeleton, deterministic dataset manifests, exact SSB/SelEx
   split validation, and foundational unit tests.
-- [ ] M2: DINOv2/SelEx baseline, per-anchor SelEx decomposition, strict scalar-equivalence
-  test.
+- [ ] M2: repaired pinned-source DINOv2 loading, Stage-0 optimization, and executable
+  exact-reference SelEx gate; completion awaits marked CUDA validation.
 - [ ] M3: direct child projection, Haar detail representation, position encodings,
   parent consistency, reconstruction/calibration tests.
 - [ ] M4: deterministic paired counterfactual engine, repeated-base acceptance checks,
@@ -71,11 +71,16 @@ explicit Cars/ImageNet legal guards, pinned split-file provenance validation, an
 fixture tests. No benchmark manifest has been generated: licensed datasets and the exact
 pinned upstream split files are not present in this repository.
 
-## Immediate next milestone: M2 (not started)
+## M2 repair status
 
-M2 may begin only as a separate milestone. It must integrate official DINOv2 and SelEx
-components and demonstrate exact per-anchor/scalar equivalence; M1 does not claim either
-integration.
+M2 verifies a local pinned DINOv2 checkout and source hashes, constructs official
+ViT-B/14, and strictly loads the supplied complete state dictionary. Stage-0 performs
+real two-view image optimization and resumable atomic checkpointing. The SelEx gate
+executes the isolated MIT snapshot and is re-executed by validation. No benchmark ran.
+
+## Next milestone: M3 (not started; blocked until M2 completion)
+
+M3 child-token work remains entirely unstarted by this milestone.
 
 ## Hard gates and stop rules
 

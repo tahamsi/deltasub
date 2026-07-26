@@ -5,12 +5,12 @@ but no publication baseline has been completed or run. No benchmark results are 
 Pinned details are recorded in `third_party/manifest.yaml`.
 
 M1 data foundations are complete and covered by local synthetic filesystem fixtures.
-No real dataset, SSB/SelEx split file, or resulting benchmark manifest is present, so all
-real-data validation outcomes remain pending. M2 model/baseline work has not started.
+No real dataset, split file, benchmark manifest, pinned DINOv2 checkout, or official
+checkpoint is present. M2 now has a real training path; only test-only CPU fixtures ran.
 
 | Required name | Upstream status | Original protocol | Planned integration | Current status | Principal incompatibility / risk |
 |---|---|---|---|---|---|
-| ViT / DINOv2 + SelEx | Official DINOv2 and SelEx code available | Fine-grained GCD for SelEx; DINOv2 backbone | Official components in common harness | Not started | Per-anchor SelEx refactor must exactly preserve scalar reduction |
+| ViT / DINOv2 + SelEx | Official DINOv2 and SelEx code available | Fine-grained GCD for SelEx; DINOv2 backbone | Pinned source, strict full-state load, exact-reference gate | M2 CPU repair validated; CUDA/real run N/A | Real inputs, pinned checkout, and external CUDA validation are absent |
 | TransFG-GCD-Port | Official MIT code available | Supervised FGVC, ViT-B/16, typically 448 px | Faithful port if feasible | Not started | Attention part selection and supervised contrastive recipe differ from GCD |
 | CFViT-GCD-Port | Official Apache-2.0 code available | ImageNet classification, coarse-to-fine dynamic inference | Faithful/approximate port to be determined | Not started | LV-ViT/DeiT-era two-stage architecture differs from DINOv2 |
 | LFViT-GCD-Port | Official code/checkpoints visible | ImageNet classification, DeiT-S, localization/focus stages | Unavailable pending license | Blocked | Repository has no root license; source reuse is not authorized |
@@ -20,7 +20,7 @@ real-data validation outcomes remain pending. M2 model/baseline work has not sta
 | SpiralFovea-GCD-Reimplementation | Paper found; no verified code | Fine-grained classification; entropy-driven foveated grid | Clean-room reimplementation | Not started | Replaces grid with mixed-scale tokens; recent paper-only method |
 | ARTA-Cls-Port | Paper found; no verified code | Dense semantic feature extraction/segmentation | Classification port only if defensible | Not started | Boundary allocation is designed for dense labels, not GCD |
 | SubViT-Reimplementation | Paper found; no verified code | Fine-grained GCD with deletion-degradation router | Clean-room reimplementation | Not started | Must reproduce two-stage subdivision without claiming official status |
-| DeltaSub | New method | Fine-grained GCD | Native implementation | Not started | Central hypothesis must survive deterministic paired diagnostic |
+| DeltaSub | New method | Fine-grained GCD | Native implementation | M3 and later not started | Central hypothesis must survive deterministic paired diagnostic |
 
 ## Comparison policy
 

@@ -1,0 +1,32 @@
+schema_version: 1
+dataset:
+  manifest: artifacts/data/cub/manifest.jsonl
+  manifest_sha256: REQUIRED_EXTERNAL
+  split_validation_report: artifacts/data/cub/split_validation.json
+backbone:
+  name: dinov2_vitb14
+  source_root: REQUIRED_PINNED_LOCAL_CHECKOUT
+  checkpoint: REQUIRED_EXTERNAL
+  checkpoint_sha256: REQUIRED_EXTERNAL
+  input_size: 224
+  patch_size: 14
+  trainable_blocks: 2
+training:
+  device: cuda:0
+  precision: bf16
+  physical_batch_size: 32
+  gradient_accumulation: 4
+  effective_batch_size: 128
+  optimizer: sgd
+  scheduler: cosine
+  learning_rate: 0.1
+  epochs: 200
+selex:
+  temperature: 1.0
+  supervised_temperature: 0.07
+  supervised_weight: 0.35
+  unsupervised_smoothing: 1.0
+  hierarchy: powers_of_two
+  equivalence_gate: artifacts/gates/m2_selex_equivalence.json
+output_directory: artifacts/runs/cub_vit_selex_seed0
+seed: 0

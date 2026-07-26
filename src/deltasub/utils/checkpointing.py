@@ -21,5 +21,10 @@ def atomic_torch_save(value: Any, path: str | Path) -> None:
             os.unlink(temporary)
 
 
-def load_checkpoint(path: str | Path) -> Any:
-    return torch.load(Path(path), map_location="cpu", weights_only=False)
+def load_checkpoint(
+    path: str | Path, *, map_location: str | torch.device = "cpu"
+) -> Any:
+    """Load a checkpoint on an explicit device, defaulting to portable CPU inspection."""
+    return torch.load(
+        Path(path), map_location=map_location, weights_only=False
+    )

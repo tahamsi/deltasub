@@ -42,6 +42,9 @@ class CLITests(unittest.TestCase):
             ["data", "validate-all", "--help"],
             ["references", "--help"],
             ["references", "inspect", "--help"],
+            ["backbone", "inspect", "--help"],
+            ["selex", "verify-equivalence", "--help"],
+            ["train", "baseline", "--help"],
             ["paper", "--help"],
             ["paper", "build-all", "--help"],
         ]
@@ -58,6 +61,21 @@ class CLITests(unittest.TestCase):
         self.assertIn("python", value)
         self.assertIn("torch", value)
         self.assertIn("cuda_available", value)
+
+    def test_selex_equivalence_cuda_flags_are_explicit(self):
+        with mock.patch(
+            "deltasub.cli.verify_equivalence", return_value={"status": "passed"}
+        ) as operation:
+            code, output, _ = self.invoke(
+                ["selex", "verify-equivalence", "--cuda", "--bf16"]
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(output)["status"], "passed")
+        operation.assert_called_once_with(
+            "artifacts/gates/selex_equivalence.json",
+            include_cuda=True,
+            include_bf16=True,
+        )
 
     def test_memory_doctor_cpu_path_and_config_validation(self):
         with tempfile.TemporaryDirectory() as directory:

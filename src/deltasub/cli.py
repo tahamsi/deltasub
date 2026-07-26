@@ -14,6 +14,10 @@ from .data.download import OFFICIAL, download
 from .data.prepare import DATASET_ALIASES, prepare_dataset, validate_all, validate_dataset
 from .reporting.tables import summarize_runs, write_formats
 from .training.smoke_pipeline import run_smoke_pipeline
+from .training.baseline import run_baseline_training, validate_baseline
+from .training.selex_equivalence import verify_equivalence
+from .models.backbones.dinov2 import inspect_official_checkpoint
+from .utils.hashing import sha256_file
 
 
 def doctor() -> dict:
@@ -111,6 +115,31 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--root", required=True)
     validate_all_parser = data_sub.add_parser("validate-all")
     validate_all_parser.add_argument("--root", required=True)
+    backbone = sub.add_parser("backbone")
+    backbone_sub = backbone.add_subparsers(dest="backbone_command", required=True)
+    backbone_inspect = backbone_sub.add_parser("inspect")
+    backbone_inspect.add_argument("--name", choices=["dinov2_vitb14"], default="dinov2_vitb14")
+    backbone_inspect.add_argument("--checkpoint", required=True)
+    backbone_inspect.add_argument("--expected-sha256", required=True)
+    backbone_inspect.add_argument("--source-root", required=True)
+    selex = sub.add_parser("selex")
+    selex_sub = selex.add_subparsers(dest="selex_command", required=True)
+    verify = selex_sub.add_parser("verify-equivalence")
+    verify.add_argument("--output", default="artifacts/gates/selex_equivalence.json")
+    verify.add_argument("--cuda", action="store_true", help="also verify CUDA FP32")
+    verify.add_argument(
+        "--bf16", action="store_true",
+        help="also verify CUDA BF16 inputs with the FP32 distance/reduction policy (requires --cuda)",
+    )
+    train = sub.add_parser("train")
+    train_sub = train.add_subparsers(dest="train_command", required=True)
+    baseline = train_sub.add_parser("baseline")
+    baseline.add_argument("--config", required=True)
+    baseline.add_argument("--hardware")
+    baseline.add_argument("--checkpoint")
+    baseline.add_argument("--seed", type=int)
+    baseline.add_argument("--resume", action="store_true")
+    baseline.add_argument("--validate-only", "--dry-run", action="store_true", dest="validate_only")
     paper = sub.add_parser("paper")
     paper_sub = paper.add_subparsers(dest="paper_command", required=True)
     build = paper_sub.add_parser("build-all")
@@ -174,6 +203,33 @@ def main(argv=None) -> int:
                 raise ValueError(f"unsupported data command: {args.data_command}")
         except (FileNotFoundError, ValueError, OSError) as error:
             print(f"data error: {error}", file=sys.stderr)
+            return 2
+    elif args.command == "backbone":
+        try:
+            _, inspection = inspect_official_checkpoint(
+                args.checkpoint, args.expected_sha256, source_root=args.source_root, model_name=args.name
+            )
+            result = vars(inspection)
+            if not inspection.compatible:
+                print(json.dumps(result, indent=2, default=str), file=sys.stderr)
+                return 2
+        except (FileNotFoundError, ValueError, OSError) as error:
+            print(f"backbone error: {error}", file=sys.stderr)
+            return 2
+    elif args.command == "selex":
+        try:
+            result = verify_equivalence(
+                args.output, include_cuda=args.cuda, include_bf16=args.bf16
+            )
+        except (ValueError, RuntimeError, OSError) as error:
+            print(f"SelEx equivalence error: {error}", file=sys.stderr)
+            return 2
+    elif args.command == "train":
+        try:
+            result = (vars(validate_baseline(args.config, args.checkpoint)) if args.validate_only else
+                      run_baseline_training(args.config, args.checkpoint, resume=args.resume, seed=args.seed))
+        except (FileNotFoundError, ValueError, OSError) as error:
+            print(f"training error: {error}", file=sys.stderr)
             return 2
     elif args.command == "paper" and args.paper_command == "build-all":
         records = []
