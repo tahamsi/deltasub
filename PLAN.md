@@ -10,7 +10,8 @@ deterministic diagnostic.
 ## Current state
 
 - [x] M0: inspect cited papers and repositories; record pinned upstream heads, licenses,
-  protocols, incompatibilities, and unavailable code.
+  protocols, incompatibilities, and unavailable code. Local provenance and documentation
+  invariants are covered by `tests/unit/test_m0_provenance.py`.
 - [ ] M1: environment, CLI skeleton, deterministic dataset manifests, exact SSB/SelEx
   split validation, and foundational unit tests.
 - [ ] M2: DINOv2/SelEx baseline, per-anchor SelEx decomposition, strict scalar-equivalence
