@@ -201,6 +201,57 @@ class DINOv2Adapter(nn.Module):
         actual = (patch, self.model.embed_dim, self.model.n_blocks, self.model.patch_embed.num_patches)
         if actual != (14, 768, 12, 256):
             raise ValueError(f"incompatible DINOv2 ViT-B/14 geometry: {actual}")
+        projection = getattr(self.model.patch_embed, "proj", None)
+        norm = getattr(self.model.patch_embed, "norm", None)
+        if not isinstance(projection, nn.Conv2d) or (
+            projection.in_channels, projection.out_channels, projection.kernel_size,
+            projection.stride, projection.groups, projection.padding,
+        ) != (3, 768, (14, 14), (14, 14), 1, (0, 0)):
+            raise ValueError("official parent patch projection geometry is incompatible")
+        if not isinstance(norm, nn.Identity):
+            raise ValueError("official patch embedding has non-identity normalization")
+
+    @property
+    def parent_projection(self) -> nn.Conv2d:
+        """Return the already-loaded official projection; callers must not mutate it."""
+        return self.model.patch_embed.proj
+
+    @property
+    def prefix_token_count(self) -> int:
+        return 1 + int(self.model.num_register_tokens)
+
+    def parent_patch_positions(self) -> torch.Tensor:
+        """Exact 224px parent-cell component from the loaded official position table."""
+        positions = self.model.pos_embed[:, 1:]
+        if positions.shape != (1, 256, 768):
+            raise ValueError(f"official parent position shape mismatch: {tuple(positions.shape)}")
+        return positions
+
+    def prefix_tokens_with_positions(self, batch_size: int) -> torch.Tensor:
+        """CLS plus optional register tokens exactly as official token preparation uses them."""
+        cls = self.model.cls_token + self.model.pos_embed[:, :1]
+        values = [cls.expand(batch_size, -1, -1)]
+        if self.model.register_tokens is not None:
+            values.append(self.model.register_tokens.expand(batch_size, -1, -1))
+        return torch.cat(values, dim=1)
+
+    def pre_transformer_parent_embeddings(self, images: torch.Tensor) -> torch.Tensor:
+        if images.ndim != 4 or tuple(images.shape[1:]) != (3, 224, 224):
+            raise ValueError("DINOv2 ViT-B/14 requires input [B, 3, 224, 224]")
+        values = self.model.patch_embed(images)
+        if values.shape != (images.shape[0], 256, 768):
+            raise ValueError(f"official patch_embed contract mismatch: {tuple(values.shape)}")
+        return values
+
+    def build_child_projector(self, *, trainable: bool = True):
+        from ..subtokens.projection import ChildProjector
+        return ChildProjector.from_patch_embed(
+            self.model.patch_embed, trainable=trainable,
+            provenance=(
+                f"official DINOv2 {self.inspection.source_revision}; "
+                f"checkpoint sha256 {self.checkpoint_sha256}"
+            ),
+        )
 
     def set_trainable_blocks(self, policy: str | int) -> dict[str, int]:
         blocks = list(self.model.blocks)
@@ -226,7 +277,7 @@ class DINOv2Adapter(nn.Module):
     def forward(self, images: torch.Tensor, intermediate_blocks: Sequence[int] = ()) -> BackboneOutput:
         if tuple(images.shape[1:]) != (3, 224, 224):
             raise ValueError("DINOv2 ViT-B/14 requires input [B, 3, 224, 224]")
-        pre = self.model.patch_embed(images)
+        pre = self.pre_transformer_parent_embeddings(images)
         if pre.ndim != 3 or pre.shape[1:] != (256, 768):
             raise ValueError(f"official patch_embed contract mismatch: {tuple(pre.shape)}")
         result = self.model.forward_features(images)

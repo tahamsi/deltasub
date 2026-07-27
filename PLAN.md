@@ -14,10 +14,11 @@ deterministic diagnostic.
   invariants are covered by `tests/unit/test_m0_provenance.py`.
 - [x] M1: environment, CLI skeleton, deterministic dataset manifests, exact SSB/SelEx
   split validation, and foundational unit tests.
-- [ ] M2: repaired pinned-source DINOv2 loading, Stage-0 optimization, and executable
-  exact-reference SelEx gate; completion awaits marked CUDA validation.
-- [ ] M3: direct child projection, Haar detail representation, position encodings,
-  parent consistency, reconstruction/calibration tests.
+- [x] M2: repaired pinned-source DINOv2 loading, Stage-0 optimization, and executable
+  exact-reference SelEx gate. CPU and pinned architecture validation are complete;
+  marked CUDA coverage remains environment-skipped rather than fabricated.
+- [x] M3: exact direct child projection, Haar detail representation, parent-aware
+  positions, hard parent consistency, stable sequence assembly, and reconstruction tests.
 - [ ] M4: deterministic paired counterfactual engine, repeated-base acceptance checks,
   incremental compatible Parquet cache, interruption/resume.
 - [ ] M5: two-stream candidate sampler, stratified replay buffer, router loss/training,
@@ -78,9 +79,21 @@ ViT-B/14, and strictly loads the supplied complete state dictionary. Stage-0 per
 real two-view image optimization and resumable atomic checkpointing. The SelEx gate
 executes the isolated MIT snapshot and is re-executed by validation. No benchmark ran.
 
-## Next milestone: M3 (not started; blocked until M2 completion)
+## M3 completion
 
-M3 child-token work remains entirely unstarted by this milestone.
+Every 224×224 input is partitioned row-major into 256 non-overlapping 14×14 parents,
+then directly into TL, TR, BL, BR 7×7 children. Four quadrant projectors are initialized
+from the loaded official DINOv2 convolution, and hard mean consistency is imposed before
+three orthonormal horizontal, vertical, and diagonal Haar details are formed. Original
+parents remain in the sequence; a supplied mask appends exactly three ordered details
+per selected parent. Positions retain the parent-cell component plus a zero-initialized
+learned mode embedding. CPU fixture and exact pinned official-architecture integration
+tests passed; CUDA was unavailable and no benchmark or real checkpoint was run.
+
+## Next milestone: M4 (not started)
+
+M4 deterministic paired counterfactual gain collection remains unimplemented. M3 contains
+no gain labels, selection scores, router, replay, or adaptive budget policy.
 
 ## Hard gates and stop rules
 

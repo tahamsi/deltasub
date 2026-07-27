@@ -17,6 +17,7 @@ from .training.smoke_pipeline import run_smoke_pipeline
 from .training.baseline import run_baseline_training, validate_baseline
 from .training.selex_equivalence import verify_equivalence
 from .models.backbones.dinov2 import inspect_official_checkpoint
+from .models.subtokens.diagnostic import run_fixture_diagnostic
 from .utils.hashing import sha256_file
 
 
@@ -131,6 +132,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--bf16", action="store_true",
         help="also verify CUDA BF16 inputs with the FP32 distance/reduction policy (requires --cuda)",
     )
+    subtokens = sub.add_parser("subtokens")
+    subtokens_sub = subtokens.add_subparsers(dest="subtokens_command", required=True)
+    subtokens_validate = subtokens_sub.add_parser("validate")
+    subtokens_validate.add_argument("--config", default="configs/smoke/m3_subtokens.yaml")
     train = sub.add_parser("train")
     train_sub = train.add_subparsers(dest="train_command", required=True)
     baseline = train_sub.add_parser("baseline")
@@ -216,6 +221,8 @@ def main(argv=None) -> int:
         except (FileNotFoundError, ValueError, OSError) as error:
             print(f"backbone error: {error}", file=sys.stderr)
             return 2
+    elif args.command == "subtokens":
+        result = run_fixture_diagnostic(args.config)
     elif args.command == "selex":
         try:
             result = verify_equivalence(

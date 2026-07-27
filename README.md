@@ -188,6 +188,37 @@ evaluation are not exposed. Those commands belong to later milestones;
 attempting to use them produces an argparse “invalid choice” error rather than silently
 running a substitute implementation.
 
+## M3 direct Haar subtokens
+
+M3 exposes an exact, differentiable token-geometry foundation:
+
+- A `[B,3,224,224]` image becomes 256 row-major 14×14 parents, indexed
+  `row * 16 + column`, with an exact inverse.
+- Each parent is split directly from pixels into `[TL, TR, BL, BR]` 7×7 children.
+- Official DINOv2 projection quadrants initialize each child as
+  `4 * linear(child, W_quadrant) + parent_bias`; the loaded parent projection is not
+  mutated.
+- `c_q = r_q - mean_q(r_q) + p` preserves gradients and enforces the original parent
+  token as the child mean within the active dtype's arithmetic.
+- The fixed detail matrix is
+  `0.5 * [[1,-1,1,-1], [1,1,-1,-1], [1,-1,-1,1]]`, ordered horizontal,
+  vertical, diagonal. The parent is retained, so no redundant low-pass token is added.
+- A detail position is its exact parent position plus one zero-initialized learned mode
+  embedding. CLS and register handling remains unchanged.
+- Sequences contain prefixes, all 256 parents, then selected details by ascending parent
+  and mode. A supplied mask selecting K parents adds exactly `3K` valid tokens;
+  heterogeneous batches use deterministic right padding and `-1` metadata sentinels.
+
+Run the non-reportable CPU fixture:
+
+```bash
+python -m deltasub.cli subtokens validate --config configs/smoke/m3_subtokens.yaml
+```
+
+`configs/subtokens/haar_direct.yaml` records the production geometry. M3 does not choose
+the supplied mask and implements no scores, gains, router, replay, or adaptive budget.
+Those remain later milestones; no real benchmark training is launched by this command.
+
 ## M2 SelEx equivalence
 
 The production loss is checked against an isolated minimal executable snapshot of the
