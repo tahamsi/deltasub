@@ -1,0 +1,36 @@
+schema_version: 1
+test_only: false
+dataset:
+  name: cub
+  manifest: REPLACE_WITH_MANIFEST.jsonl
+  manifest_sha256: REPLACE_WITH_64_CHARACTER_SHA256____________________________
+  split_report: REPLACE_WITH_SPLIT_REPORT.json
+  split_report_sha256: REPLACE_WITH_64_CHARACTER_SHA256____________________________
+backbone:
+  name: dinov2_vitb14
+  source_root: /home/ubuntu/references/dinov2-7764ea0f912e53c92e82eb78a2a1631e92725fc8
+  checkpoint: REPLACE_WITH_OFFICIAL_CHECKPOINT.pth
+  checkpoint_sha256: REPLACE_WITH_64_CHARACTER_SHA256____________________________
+selex:
+  equivalence_gate: artifacts/gates/m2_selex_equivalence.json
+  equivalence_gate_sha256: REPLACE_WITH_64_CHARACTER_SHA256____________________________
+subtokens:
+  config: configs/subtokens/haar_direct.yaml
+  config_sha256: REPLACE_WITH_64_CHARACTER_SHA256____________________________
+collection:
+  batch_size: 16
+  candidate:
+    mode: all
+    parent_indices: null
+    start: null
+    stop: null
+    sample_limit: null
+    batch_limit: null
+  seed: 0
+  precision: fp32
+  device: cuda:0
+  shard_size: 1024
+  deterministic_algorithms: error
+  counterfactual_chunk_size: 4
+  resume_policy: verify
+output_root: artifacts/gains

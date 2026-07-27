@@ -1,6 +1,6 @@
 # DeltaSub implementation plan
 
-Status date: 2026-07-26
+Status date: 2026-07-27
 
 DeltaSub tests whether counterfactual subdivision gain is a better routing target than
 attention, deletion importance, or cheap detail scores for fine-grained generalized
@@ -19,8 +19,8 @@ deterministic diagnostic.
   marked CUDA coverage remains environment-skipped rather than fabricated.
 - [x] M3: exact direct child projection, Haar detail representation, parent-aware
   positions, hard parent consistency, stable sequence assembly, and reconstruction tests.
-- [ ] M4: deterministic paired counterfactual engine, repeated-base acceptance checks,
-  incremental compatible Parquet cache, interruption/resume.
+- [x] M4: deterministic paired real-token counterfactual engine, immutable batch-context
+  hashes, versioned incremental Parquet cache, validation, and interruption/resume.
 - [ ] M5: two-stream candidate sampler, stratified replay buffer, router loss/training,
   calibration and ranking metrics.
 - [ ] M6: fixed/adaptive budget control, discrete K buckets, effective/padded accounting,
@@ -90,10 +90,26 @@ per selected parent. Positions retain the parent-cell component plus a zero-init
 learned mode embedding. CPU fixture and exact pinned official-architecture integration
 tests passed; CUDA was unavailable and no benchmark or real checkpoint was run.
 
-## Next milestone: M4 (not started)
+## M4 completion
 
-M4 deterministic paired counterfactual gain collection remains unimplemented. M3 contains
-no gain labels, selection scores, router, replay, or adaptive budget policy.
+M4 defines `gain(i,j) = per_anchor_loss_base(i) -
+per_anchor_loss_counterfactual(i,j)`. The counterfactual retains every original prefix
+and parent token and adds only parent `j`'s three M3 Haar details to both fixed views of
+anchor `i`. Transformer inference is eval-only and unpadded per sample; the complete
+fixed SelEx batch is then recomputed, so non-anchor spillover from the contrastive batch
+is measured separately from the primary anchor label.
+
+Batch contexts bind ordered IDs/views, materialized image hashes, augmentation metadata,
+all label/pseudo-label/confusion tensors, model/projector/head states, configuration,
+precision/device/mode, and source commit. Base reuse fails closed on any changed field.
+The content-addressed cache uses explicit Parquet shards with atomic writes, checksummed
+indices, deterministic ordering, streaming reads, idempotent resume, and recomputed
+validation. The deterministic tiny fixture is synthetic and non-reportable.
+
+## Next milestone: M5 (not started)
+
+M5 router training, replay, and sampling remain unimplemented in the production M4 path.
+No router was trained, and no real benchmark collection or training ran.
 
 ## Hard gates and stop rules
 

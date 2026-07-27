@@ -18,6 +18,8 @@ from .training.baseline import run_baseline_training, validate_baseline
 from .training.selex_equivalence import verify_equivalence
 from .models.backbones.dinov2 import inspect_official_checkpoint
 from .models.subtokens.diagnostic import run_fixture_diagnostic
+from .gains.cache import inspect_cache, open_cache
+from .gains.collector import collect as collect_gains
 from .utils.hashing import sha256_file
 
 
@@ -136,6 +138,19 @@ def build_parser() -> argparse.ArgumentParser:
     subtokens_sub = subtokens.add_subparsers(dest="subtokens_command", required=True)
     subtokens_validate = subtokens_sub.add_parser("validate")
     subtokens_validate.add_argument("--config", default="configs/smoke/m3_subtokens.yaml")
+    gains = sub.add_parser("gains")
+    gains_sub = gains.add_subparsers(dest="gains_command", required=True)
+    gains_collect = gains_sub.add_parser("collect")
+    gains_collect.add_argument("--config", required=True)
+    gains_collect.add_argument("--checkpoint")
+    gains_collect.add_argument("--expected-sha256")
+    gains_collect.add_argument("--source-root")
+    gains_collect.add_argument("--resume", action="store_true")
+    gains_collect.add_argument("--validate-only", action="store_true")
+    gains_validate = gains_sub.add_parser("validate")
+    gains_validate.add_argument("cache")
+    gains_inspect = gains_sub.add_parser("inspect")
+    gains_inspect.add_argument("cache")
     train = sub.add_parser("train")
     train_sub = train.add_subparsers(dest="train_command", required=True)
     baseline = train_sub.add_parser("baseline")
@@ -223,6 +238,21 @@ def main(argv=None) -> int:
             return 2
     elif args.command == "subtokens":
         result = run_fixture_diagnostic(args.config)
+    elif args.command == "gains":
+        try:
+            if args.gains_command == "collect":
+                result = collect_gains(
+                    args.config, checkpoint=args.checkpoint,
+                    expected_sha256=args.expected_sha256, source_root=args.source_root,
+                    resume=args.resume, validate_only=args.validate_only,
+                )
+            elif args.gains_command == "validate":
+                result = open_cache(args.cache).validate()
+            else:
+                result = inspect_cache(args.cache)
+        except (FileNotFoundError, FileExistsError, ValueError, RuntimeError, OSError) as error:
+            print(f"gains error: {error}", file=sys.stderr)
+            return 2
     elif args.command == "selex":
         try:
             result = verify_equivalence(

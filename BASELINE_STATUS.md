@@ -1,6 +1,6 @@
 # Baseline status
 
-Status date: 2026-07-26. Shared synthetic infrastructure has been implemented and tested,
+Status date: 2026-07-27. Shared synthetic infrastructure has been implemented and tested,
 but no publication baseline has been completed or run. No benchmark results are claimed.
 Pinned details are recorded in `third_party/manifest.yaml`.
 
@@ -21,7 +21,7 @@ M2 now has a real training path; only test-only CPU fixtures ran.
 | SpiralFovea-GCD-Reimplementation | Paper found; no verified code | Fine-grained classification; entropy-driven foveated grid | Clean-room reimplementation | Not started | Replaces grid with mixed-scale tokens; recent paper-only method |
 | ARTA-Cls-Port | Paper found; no verified code | Dense semantic feature extraction/segmentation | Classification port only if defensible | Not started | Boundary allocation is designed for dense labels, not GCD |
 | SubViT-Reimplementation | Paper found; no verified code | Fine-grained GCD with deletion-degradation router | Clean-room reimplementation | Not started | Must reproduce two-stage subdivision without claiming official status |
-| DeltaSub | New method | Fine-grained GCD | Native implementation | M3 token geometry complete on CPU and pinned official architecture; M4+ not started | CUDA M3 test remains environment-skipped; central hypothesis is untested |
+| DeltaSub | New method | Fine-grained GCD | Native implementation | M4 deterministic paired gain cache complete with a non-reportable CPU fixture; M5+ not started | CUDA paired test and real pretrained checkpoint/data remain environment-dependent; central hypothesis is untested |
 
 ## Comparison policy
 
@@ -51,3 +51,18 @@ Generated complete official-architecture state dictionaries exercised the strict
 loading path with and without four register tokens. This is architecture validation,
 not pretrained-checkpoint or benchmark evidence. No gains, router, or benchmark result
 was produced.
+
+## M4 gain foundation
+
+The M4 primary label is the anchor-specific loss reduction, never the scalar batch
+change. Base and counterfactual evaluations reuse identical materialized views, batch
+membership/order, labels, hierarchy, pseudo-label confidence, confusion factors, model
+state, precision, and RNG context. Only three parent-aware Haar details are added for
+one anchor/parent candidate. Non-anchor loss changes caused by SelEx batch coupling are
+stored as spillover diagnostics.
+
+Gain records and caches bind dataset/split, official-backbone, M3 projector, SelEx gate,
+configuration, batch-context, device/precision, and source provenance. Invalid anchors
+remain explicitly flagged and are not converted into valid zero-gain labels. The M4
+fixture uses a tiny test-only transformer and synthetic deterministic tensors; it is
+diagnostic and non-reportable. No router was trained and no benchmark ran.

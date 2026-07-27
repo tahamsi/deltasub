@@ -2,9 +2,10 @@
 
 DeltaSub is a research repository for testing counterfactual value-of-subdivision
 routing in fine-grained generalized category discovery. The repository currently
-provides tested token geometry, Haar detail tokens, per-anchor contrastive reduction,
-deterministic paired-gain machinery, two-stream candidate sampling, routing losses,
-budget bucketing, manifests, result schemas, and a complete synthetic smoke pipeline.
+provides tested token geometry, Haar detail tokens, exact per-anchor SelEx reduction,
+deterministic paired counterfactual gain collection, content-addressed gain caches,
+manifests, result schemas, and synthetic diagnostics. Production router training,
+adaptive budgets, and benchmark experiments are not implemented.
 
 It does **not** contain completed CUB, Aircraft, Cars, CIFAR-10, or ImageNet-100
 experiments. Synthetic metrics are marked `synthetic_only: true` and are excluded from
@@ -183,10 +184,8 @@ an expected checkpoint SHA256 has not been independently pinned here. Supply the
 file and its SHA256 in the resolved experiment configuration. The adapter never falls
 back to random weights.
 
-Gain collection, router training, diagnosis, audits, GCD evaluation, and efficiency
-evaluation are not exposed. Those commands belong to later milestones;
-attempting to use them produces an argparse “invalid choice” error rather than silently
-running a substitute implementation.
+M4 gain collection is exposed under `gains`; router training, diagnosis, audits, GCD
+evaluation, and efficiency evaluation remain unavailable.
 
 ## M3 direct Haar subtokens
 
@@ -218,6 +217,50 @@ python -m deltasub.cli subtokens validate --config configs/smoke/m3_subtokens.ya
 `configs/subtokens/haar_direct.yaml` records the production geometry. M3 does not choose
 the supplied mask and implements no scores, gains, router, replay, or adaptive budget.
 Those remain later milestones; no real benchmark training is launched by this command.
+
+## M4 deterministic counterfactual gains
+
+For anchor `i` and parent patch `j`, M4 stores:
+
+```text
+gain(i,j) = per_anchor_loss_base(i) - per_anchor_loss_counterfactual(i,j)
+```
+
+Positive means the three M3 Haar detail tokens reduced anchor `i`'s SelEx loss. The
+counterfactual keeps the same two materialized views, ordered batch, labels/masks,
+hierarchy, pseudo-label confidence, confusion factors, weights, precision, and RNG
+context. It retains the original parent and changes no other sample or parent. Because
+SelEx couples the batch, the record stores both the anchor gain and separate scalar
+batch/non-anchor spillover changes; spillover is not the router label.
+
+The batch-context key hashes ordered sample/view IDs, image content, deterministic
+augmentation seeds/parameters, every SelEx context tensor, model/projector/head state,
+configuration, precision/device/mode, source commit, and provenance. The cache ID is the
+SHA256 of canonical immutable cache metadata, including its set of batch-context hashes.
+Records are ordered by batch, anchor position, then ascending parent index. Resume
+verifies metadata, explicit Parquet schemas, shard hashes, record keys, and invariants;
+temporary shards are ignored safely and incompatible/corrupt caches fail closed.
+Invalid anchors are stored with `anchor_valid: false`; their finite diagnostic arithmetic
+must not be treated as a valid label.
+
+CLI:
+
+```bash
+python -m deltasub.cli gains collect --config configs/smoke/m4_gains.yaml
+python -m deltasub.cli gains validate artifacts/gains/CACHE_ID
+python -m deltasub.cli gains inspect artifacts/gains/CACHE_ID
+python -m deltasub.cli gains collect --config configs/gains/cub_m4.yaml \
+  --checkpoint CHECKPOINT.pth --expected-sha256 SHA256 \
+  --source-root /path/to/pinned/dinov2 --resume
+```
+
+The smoke configuration runs a tiny explicitly test-only transformer while exercising
+the real M3 token and exact M2 loss paths. Its outputs are labelled synthetic,
+diagnostic, and non-reportable. Production validation rejects missing hashes, implicit
+devices, test models, malformed candidate sets, and failed M1/M2/M3 provenance. A real
+collection additionally requires a materialized deterministic two-view provider and
+the exact M2 projection-head checkpoint; these are never inferred. M5 has not started:
+there is no router command, replay buffer use, or learned candidate policy.
 
 ## M2 SelEx equivalence
 
