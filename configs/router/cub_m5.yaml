@@ -1,0 +1,51 @@
+schema_version: 1
+test_only: false
+gain_cache_path: REPLACE_WITH_VALIDATED_M4_CUB_CACHE
+expected_cache_id: REPLACE_WITH_64_CHARACTER_CACHE_ID
+feature_cache_path: REPLACE_WITH_MATCHING_M5_FEATURE_CACHE
+splits:
+  train_fraction: 0.8
+  validation_fraction: 0.2
+  test_fraction: 0.0
+  seed: 5005
+router:
+  input_dim: 768
+  hidden_dim: 256
+  depth: 2
+  normalization: layernorm
+  dropout: 0.0
+  coordinate_features: true
+  global_context_features: true
+  learned_position_embedding: false
+loss:
+  regression: huber
+  huber_delta: 0.1
+  regression_weight: 1.0
+  ranking_weight: 0.5
+  ranking_margin: 0.0
+  maximum_pairs_per_anchor: 1024
+  sign_weight: 0.0
+  sign_epsilon: 0.0
+  gain_clip: null
+training:
+  physical_batch_size: 64
+  gradient_accumulation: 4
+  effective_batch_size: 256
+  optimizer: adamw
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  scheduler: cosine
+  epochs: 50
+  gradient_clipping: 1.0
+  precision: bf16
+  device: cuda:0
+sampling:
+  informative_fraction: 0.5
+replay:
+  capacity: 4096
+  ratio: 0.25
+  priority_mode: stratified_priority
+  near_zero_epsilon: 1.0e-6
+checkpoint_directory: artifacts/router/cub_m5
+validation_metric: spearman
+seed: 5005

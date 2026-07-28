@@ -21,7 +21,7 @@ M2 now has a real training path; only test-only CPU fixtures ran.
 | SpiralFovea-GCD-Reimplementation | Paper found; no verified code | Fine-grained classification; entropy-driven foveated grid | Clean-room reimplementation | Not started | Replaces grid with mixed-scale tokens; recent paper-only method |
 | ARTA-Cls-Port | Paper found; no verified code | Dense semantic feature extraction/segmentation | Classification port only if defensible | Not started | Boundary allocation is designed for dense labels, not GCD |
 | SubViT-Reimplementation | Paper found; no verified code | Fine-grained GCD with deletion-degradation router | Clean-room reimplementation | Not started | Must reproduce two-stage subdivision without claiming official status |
-| DeltaSub | New method | Fine-grained GCD | Native implementation | M4 deterministic paired gain cache complete with a non-reportable CPU fixture; M5+ not started | CUDA paired test and real pretrained checkpoint/data remain environment-dependent; central hypothesis is untested |
+| DeltaSub | New method | Fine-grained GCD | Native implementation | M5 deterministic pre-transformer gain-router training complete with a non-reportable CPU fixture; M6+ not started | CUDA and real pretrained checkpoint/data remain environment-dependent; central hypothesis is untested |
 
 ## Comparison policy
 
@@ -65,4 +65,26 @@ Gain records and caches bind dataset/split, official-backbone, M3 projector, Sel
 configuration, batch-context, device/precision, and source provenance. Invalid anchors
 remain explicitly flagged and are not converted into valid zero-gain labels. The M4
 fixture uses a tiny test-only transformer and synthetic deterministic tensors; it is
-diagnostic and non-reportable. No router was trained and no benchmark ran.
+diagnostic and non-reportable. M4 itself trained no router and ran no benchmark.
+
+## M5 router foundation
+
+The production M5 router is an O(256D) shared per-parent MLP. Its inputs are the local
+pre-transformer parent embedding, the masked global mean of all parents, and normalized
+row/column coordinates; optional learned parent positions are supported. It cannot accept
+counterfactual tokens, transformer outputs, gain labels, or selection state as features.
+It emits 256 ordered predicted gains and performs no token selection.
+
+M4 records and router features join by exact sample, view layout, batch context, manifest,
+checkpoint, and gain-configuration provenance. Deterministic SHA256 assignment keeps all
+views, contexts, and candidate parents for a sample in one train/validation/test split.
+Training optimizes the explicitly sampled mixture of a uniform coverage stream and an
+immutable gain-informed stream. No default inverse-propensity correction is claimed:
+unbiased evaluation uses the complete validation split. Bounded replay stores identifiers
+and post-training residual priorities only, with deterministic sign-stratified eviction.
+
+The loss combines valid-anchor Huber gain regression, deterministic within-anchor
+logistic ranking above a target margin, and an optional positive-gain BCE auxiliary.
+Validation reports regression, correlation, ranking, top-K diagnostic, sign, and quantile
+calibration metrics with explicit undefined values. The M5 fixture is synthetic,
+diagnostic, and non-reportable. No adaptive budget or benchmark run was executed.

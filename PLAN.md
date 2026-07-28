@@ -21,7 +21,7 @@ deterministic diagnostic.
   positions, hard parent consistency, stable sequence assembly, and reconstruction tests.
 - [x] M4: deterministic paired real-token counterfactual engine, immutable batch-context
   hashes, versioned incremental Parquet cache, validation, and interruption/resume.
-- [ ] M5: two-stream candidate sampler, stratified replay buffer, router loss/training,
+- [x] M5: two-stream candidate sampler, stratified replay buffer, router loss/training,
   calibration and ranking metrics.
 - [ ] M6: fixed/adaptive budget control, discrete K buckets, effective/padded accounting,
   measured latency and memory.
@@ -106,10 +106,27 @@ The content-addressed cache uses explicit Parquet shards with atomic writes, che
 indices, deterministic ordering, streaming reads, idempotent resume, and recomputed
 validation. The deterministic tiny fixture is synthetic and non-reportable.
 
-## Next milestone: M5 (not started)
+## M5 completion
 
-M5 router training, replay, and sampling remain unimplemented in the production M4 path.
-No router was trained, and no real benchmark collection or training ran.
+M5 adds a compact shared per-parent gain router that consumes only the 256 frozen
+pre-transformer DINOv2 parent embeddings, their global mean, and normalized row/column
+coordinates. It predicts all 256 M4 gains without selecting or inserting tokens.
+Training joins features and labels by the complete immutable M4 record identity, splits
+at stable sample identity, combines deterministic uniform-coverage and immutable
+gain-informed streams, and uses bounded deterministic stratified-priority replay.
+
+The objective is mean valid-anchor Huber regression plus mean deterministic within-anchor
+logistic ranking, with an optional positive-gain BCE auxiliary. Invalid anchors remain
+auditable but are excluded from optimization. Complete validation records determine best
+checkpoints through a configured ranking/correlation metric. The synthetic fixture
+exercises atomic last/best checkpoints, replay eviction and restore, exact resume, and
+independent deterministic CPU reruns. It is explicitly non-reportable.
+
+## Next milestone: M6 (not started)
+
+M6 adaptive budgets, top-K execution, dual updates, and length bucketing remain
+unimplemented in the production M5 path. M5 top-K values are metrics only. No adaptive
+token budget, token insertion, real benchmark collection, or benchmark training ran.
 
 ## Hard gates and stop rules
 

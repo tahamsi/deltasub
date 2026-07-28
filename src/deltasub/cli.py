@@ -20,6 +20,10 @@ from .models.backbones.dinov2 import inspect_official_checkpoint
 from .models.subtokens.diagnostic import run_fixture_diagnostic
 from .gains.cache import inspect_cache, open_cache
 from .gains.collector import collect as collect_gains
+from .router.config import load_router_config
+from .router.fixture import run_router_fixture
+from .router.features import load_feature_cache
+from .router.training import inspect_router_checkpoint, train_from_cache, validate_router_cache
 from .utils.hashing import sha256_file
 
 
@@ -151,6 +155,22 @@ def build_parser() -> argparse.ArgumentParser:
     gains_validate.add_argument("cache")
     gains_inspect = gains_sub.add_parser("inspect")
     gains_inspect.add_argument("cache")
+    router = sub.add_parser(
+        "router", help="M5 pre-transformer gain router (no token selection or budgets)"
+    )
+    router_sub = router.add_subparsers(dest="router_command", required=True)
+    router_train = router_sub.add_parser("train")
+    router_train.add_argument("--config", required=True)
+    router_train.add_argument("--resume", action="store_true")
+    router_train.add_argument("--validate-only", action="store_true")
+    router_validate = router_sub.add_parser("validate")
+    router_validate.add_argument("--config", required=True)
+    router_validate.add_argument("--checkpoint")
+    router_inspect = router_sub.add_parser("inspect")
+    router_inspect.add_argument("checkpoint")
+    router_fixture = router_sub.add_parser("fixture")
+    router_fixture.add_argument("--output", default="artifacts/router/m5_fixture")
+    router_fixture.add_argument("--resume", action="store_true")
     train = sub.add_parser("train")
     train_sub = train.add_subparsers(dest="train_command", required=True)
     baseline = train_sub.add_parser("baseline")
@@ -252,6 +272,39 @@ def main(argv=None) -> int:
                 result = inspect_cache(args.cache)
         except (FileNotFoundError, FileExistsError, ValueError, RuntimeError, OSError) as error:
             print(f"gains error: {error}", file=sys.stderr)
+            return 2
+    elif args.command == "router":
+        try:
+            if args.router_command in {"train", "validate"}:
+                config = load_router_config(args.config)
+                cache, validation = validate_router_cache(
+                    config["gain_cache_path"], config["expected_cache_id"] or None
+                )
+                result = {
+                    "status": "validated", "cache_id": cache.cache_id,
+                    "validation_hash": validation["deterministic_validation_sha256"],
+                    "training_started": False,
+                }
+                checkpoint = getattr(args, "checkpoint", None)
+                if checkpoint:
+                    result["checkpoint"] = inspect_router_checkpoint(checkpoint)
+                if args.router_command == "train" and not args.validate_only:
+                    if not config["test_only"]:
+                        result = train_from_cache(
+                            args.config, load_feature_cache(config["feature_cache_path"]),
+                            resume=args.resume,
+                        )
+                    else:
+                        result = run_router_fixture(
+                            Path(config["checkpoint_directory"]).parent,
+                            resume=args.resume,
+                        )
+            elif args.router_command == "inspect":
+                result = inspect_router_checkpoint(args.checkpoint)
+            else:
+                result = run_router_fixture(args.output, resume=args.resume)
+        except (FileNotFoundError, FileExistsError, ValueError, RuntimeError, OSError) as error:
+            print(f"router error: {error}", file=sys.stderr)
             return 2
     elif args.command == "selex":
         try:

@@ -4,8 +4,8 @@ DeltaSub is a research repository for testing counterfactual value-of-subdivisio
 routing in fine-grained generalized category discovery. The repository currently
 provides tested token geometry, Haar detail tokens, exact per-anchor SelEx reduction,
 deterministic paired counterfactual gain collection, content-addressed gain caches,
-manifests, result schemas, and synthetic diagnostics. Production router training,
-adaptive budgets, and benchmark experiments are not implemented.
+pre-transformer gain-router training, manifests, result schemas, and synthetic
+diagnostics. Adaptive budgets and benchmark experiments are not implemented.
 
 It does **not** contain completed CUB, Aircraft, Cars, CIFAR-10, or ImageNet-100
 experiments. Synthetic metrics are marked `synthetic_only: true` and are excluded from
@@ -66,6 +66,44 @@ Before real research training, supply:
 
 This repository intentionally refuses to present a synthetic implementation as a
 reproduction of SelEx or any unavailable baseline.
+
+## M5 gain router
+
+The M5 router runs before DINOv2's transformer blocks. A compact shared MLP scores every
+row-major parent patch from its 768-dimensional patch embedding, the pooled mean of all
+256 parents, and normalized row/column coordinates. Optional learned parent positions
+remain pre-transformer. Counterfactual details, post-transformer features, M4 labels,
+selection outputs, and token counts are forbidden as production features.
+
+Its regression target is exactly M4's anchor loss reduction:
+`base_per_anchor_loss - counterfactual_per_anchor_loss`. Exact provenance joins prevent
+row-number joins or changed augmentation/batch contexts. SHA256 sample-level splitting
+keeps every candidate, view, and context for a stable sample in one split.
+
+Training combines deterministic uniform parent coverage with an informative stream based
+only on immutable training-cache gains. The optimization objective is defined over this
+mixture, so inverse-propensity weighting is not enabled or implied. Validation uses all
+held-out records. A bounded deterministic replay buffer stores record identifiers and
+post-training residual priorities, never copied feature tensors or mutable labels.
+
+The objective is
+`w_reg * mean(Huber(score, gain)) + w_rank * mean(softplus(-(score_hi-score_lo)))`
+plus optional positive-gain BCE and regularization. Terms use valid anchors only;
+ranking pairs are deterministic, within the same sample/context, and require target
+difference above the configured margin. Empty pair sets contribute a finite zero.
+
+Run the non-reportable CPU fixture and inspect its checkpoint with:
+
+```bash
+python -m deltasub.cli router fixture --output artifacts/router/m5_fixture
+python -m deltasub.cli router fixture --output artifacts/router/m5_fixture --resume
+python -m deltasub.cli router inspect artifacts/router/m5_fixture/training/checkpoint_last.pt
+```
+
+MAE, RMSE, Huber, Pearson, Spearman, pairwise concordance, NDCG, sign quality, and
+quantile calibration are validation metrics. Top-K recall is diagnostic only: M5 does
+not execute top-K routing, insert detail tokens, control a budget, or claim compute
+savings. Those production execution mechanisms remain M6 work.
 
 ## Result artifacts
 
