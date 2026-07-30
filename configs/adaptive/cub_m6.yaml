@@ -1,0 +1,51 @@
+schema_version: 1
+mode: production
+m2_checkpoint:
+  path: REPLACE_WITH_M2_CHECKPOINT
+  expected_sha256: 0000000000000000000000000000000000000000000000000000000000000000
+m5_router_checkpoint:
+  path: REPLACE_WITH_M5_ROUTER_CHECKPOINT
+  expected_sha256: 0000000000000000000000000000000000000000000000000000000000000000
+dinov2:
+  source_root: /home/ubuntu/references/dinov2-7764ea0f912e53c92e82eb78a2a1631e92725fc8
+  expected_revision: 7764ea0f912e53c92e82eb78a2a1631e92725fc8
+  checkpoint_sha256: 0000000000000000000000000000000000000000000000000000000000000000
+child_projector_provenance: REPLACE_WITH_M3_CHILD_PROJECTOR_PROVENANCE
+execution:
+  mode: bucketed
+  bucket_policy: exact_length
+  bucket_boundaries: []
+budget:
+  mode: mean_total_tokens
+  unit: total_tokens
+  target: 641
+  fixed_k: null
+  per_sample_k: null
+  min_k: 0
+  max_k: 256
+controller:
+  mode: dual_threshold
+  score_threshold: 0.0
+  initial_lambda: 0.0
+  dual_learning_rate: 0.0001
+  lambda_min: -10.0
+  lambda_max: 10.0
+  dual_update_interval: 256
+training:
+  precision: bf16
+  device: cuda:0
+  physical_batch_size: 8
+  gradient_accumulation: 4
+  optimizer: adamw
+  scheduler: cosine
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  gradient_clipping: 1.0
+  epochs: 20
+  trainable_components: [classification_head]
+loss_weights:
+  classification: 1.0
+  selex: 1.0
+checkpoint_directory: artifacts/adaptive/cub_m6
+validation_metric: classification_loss
+seed: 6006

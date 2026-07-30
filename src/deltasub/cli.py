@@ -25,6 +25,8 @@ from .router.fixture import run_router_fixture
 from .router.features import load_feature_cache
 from .router.training import inspect_router_checkpoint, train_from_cache, validate_router_cache
 from .utils.hashing import sha256_file
+from .adaptive.config import load_adaptive_config
+from .adaptive.training import inspect_adaptive_checkpoint, run_fixture_training
 
 
 def doctor() -> dict:
@@ -171,6 +173,25 @@ def build_parser() -> argparse.ArgumentParser:
     router_fixture = router_sub.add_parser("fixture")
     router_fixture.add_argument("--output", default="artifacts/router/m5_fixture")
     router_fixture.add_argument("--resume", action="store_true")
+    adaptive = sub.add_parser(
+        "adaptive", help="M6 deterministic adaptive budget execution (no M7 reproduction)"
+    )
+    adaptive_sub = adaptive.add_subparsers(dest="adaptive_command", required=True)
+    adaptive_run = adaptive_sub.add_parser("run", help="generate plans and execute a fixture")
+    adaptive_run.add_argument("--config", default="configs/smoke/m6_adaptive.yaml")
+    adaptive_run.add_argument("--output", default="artifacts/adaptive/m6_fixture")
+    adaptive_train = adaptive_sub.add_parser("train", help="train the M6 adaptive foundation")
+    adaptive_train.add_argument("--config", default="configs/smoke/m6_adaptive.yaml")
+    adaptive_train.add_argument("--output", default="artifacts/adaptive/m6_fixture")
+    adaptive_train.add_argument("--resume", action="store_true")
+    adaptive_validate = adaptive_sub.add_parser("validate", help="validate configuration/checkpoints only")
+    adaptive_validate.add_argument("--config", default="configs/smoke/m6_adaptive.yaml")
+    adaptive_validate.add_argument("--checkpoint")
+    adaptive_inspect = adaptive_sub.add_parser("inspect", help="inspect an M6 checkpoint on CPU")
+    adaptive_inspect.add_argument("checkpoint")
+    adaptive_fixture = adaptive_sub.add_parser("fixture", help="run synthetic diagnostic fixture")
+    adaptive_fixture.add_argument("--output", default="artifacts/adaptive/m6_fixture")
+    adaptive_fixture.add_argument("--resume", action="store_true")
     train = sub.add_parser("train")
     train_sub = train.add_subparsers(dest="train_command", required=True)
     baseline = train_sub.add_parser("baseline")
@@ -305,6 +326,30 @@ def main(argv=None) -> int:
                 result = run_router_fixture(args.output, resume=args.resume)
         except (FileNotFoundError, FileExistsError, ValueError, RuntimeError, OSError) as error:
             print(f"router error: {error}", file=sys.stderr)
+            return 2
+    elif args.command == "adaptive":
+        try:
+            if args.adaptive_command == "inspect":
+                result = inspect_adaptive_checkpoint(args.checkpoint, map_location="cpu")
+            elif args.adaptive_command == "validate":
+                config = load_adaptive_config(args.config)
+                result = {
+                    "status": "validated", "mode": config["mode"],
+                    "training_started": False, "label": "SYNTHETIC DIAGNOSTIC NON-REPORTABLE"
+                    if config["mode"] == "fixture" else "M6 PRODUCTION VALIDATION",
+                }
+                if args.checkpoint:
+                    result["checkpoint"] = inspect_adaptive_checkpoint(args.checkpoint, "cpu")
+            elif args.adaptive_command in {"run", "train"}:
+                config = load_adaptive_config(args.config)
+                if config["mode"] != "fixture":
+                    raise ValueError("production adaptive execution requires supplied real checkpoints")
+                result = run_fixture_training(
+                    args.output, resume=getattr(args, "resume", False))
+            else:
+                result = run_fixture_training(args.output, resume=args.resume)
+        except (FileNotFoundError, ValueError, RuntimeError, OSError) as error:
+            print(f"adaptive error: {error}", file=sys.stderr)
             return 2
     elif args.command == "selex":
         try:

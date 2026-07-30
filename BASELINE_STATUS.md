@@ -1,6 +1,6 @@
 # Baseline status
 
-Status date: 2026-07-27. Shared synthetic infrastructure has been implemented and tested,
+Status date: 2026-07-29. Shared synthetic infrastructure has been implemented and tested,
 but no publication baseline has been completed or run. No benchmark results are claimed.
 Pinned details are recorded in `third_party/manifest.yaml`.
 
@@ -21,7 +21,22 @@ M2 now has a real training path; only test-only CPU fixtures ran.
 | SpiralFovea-GCD-Reimplementation | Paper found; no verified code | Fine-grained classification; entropy-driven foveated grid | Clean-room reimplementation | Not started | Replaces grid with mixed-scale tokens; recent paper-only method |
 | ARTA-Cls-Port | Paper found; no verified code | Dense semantic feature extraction/segmentation | Classification port only if defensible | Not started | Boundary allocation is designed for dense labels, not GCD |
 | SubViT-Reimplementation | Paper found; no verified code | Fine-grained GCD with deletion-degradation router | Clean-room reimplementation | Not started | Must reproduce two-stage subdivision without claiming official status |
-| DeltaSub | New method | Fine-grained GCD | Native implementation | M5 deterministic pre-transformer gain-router training complete with a non-reportable CPU fixture; M6+ not started | CUDA and real pretrained checkpoint/data remain environment-dependent; central hypothesis is untested |
+| DeltaSub | New method | Fine-grained GCD | Native implementation | M6 deterministic adaptive budget execution complete with a non-reportable CPU fixture; M7+ not started | CUDA and real pretrained checkpoint/data remain environment-dependent; central hypothesis is untested |
+
+## M6 adaptive execution foundation
+
+M6 retains all 256 parent tokens. Selecting parent `j` appends its three M3 Haar details;
+it never replaces the parent. Canonical order is prefix, row-major parents, then selected
+parents in descending router score (ascending parent index on exact ties), with details
+in horizontal/vertical/diagonal order.
+
+The implementation distinguishes selected parents, added details, effective spatial
+tokens, effective total tokens, padded tokens, approximate attention-token pairs, router
+multiply-add estimates, and measured latency. The fixture makes no FLOP, latency, or
+wall-clock-saving claim. Padded and bucketed valid outputs are compared while padding is
+excluded from meaningful outputs. The synthetic fixture uses a frozen test router and
+transformer, a trainable classification head, and a bounded dual controller. No M4 gain
+record or M5 cache is modified.
 
 ## Comparison policy
 

@@ -1,6 +1,6 @@
 # DeltaSub implementation plan
 
-Status date: 2026-07-27
+Status date: 2026-07-29
 
 DeltaSub tests whether counterfactual subdivision gain is a better routing target than
 attention, deletion importance, or cheap detail scores for fine-grained generalized
@@ -23,8 +23,9 @@ deterministic diagnostic.
   hashes, versioned incremental Parquet cache, validation, and interruption/resume.
 - [x] M5: two-stream candidate sampler, stratified replay buffer, router loss/training,
   calibration and ranking metrics.
-- [ ] M6: fixed/adaptive budget control, discrete K buckets, effective/padded accounting,
-  measured latency and memory.
+- [x] M6: deterministic fixed/threshold/dual budget control, score-ranked hard top-K,
+  adaptive sequence assembly, exact-length/configured buckets, effective/padded
+  accounting, strict checkpoint/resume, and a synthetic non-reportable fixture.
 - [ ] M7: SubViT reimplementation and decisive deletion-versus-gain diagnostic; write an
   evidence-based `DIAGNOSTIC_VERDICT.md`.
 - [ ] M8: core adapters (ViT, SubViT, DeltaSub, MSViT, DART).
@@ -122,11 +123,31 @@ checkpoints through a configured ranking/correlation metric. The synthetic fixtu
 exercises atomic last/best checkpoints, replay eviction and restore, exact resume, and
 independent deterministic CPU reruns. It is explicitly non-reportable.
 
-## Next milestone: M6 (not started)
+## M6 completion
 
-M6 adaptive budgets, top-K execution, dual updates, and length bucketing remain
-unimplemented in the production M5 path. M5 top-K values are metrics only. No adaptive
-token budget, token insertion, real benchmark collection, or benchmark training ran.
+M6 scores all 256 frozen pre-transformer parent embeddings, retains every parent, and
+adds exactly three M3 Haar details for each selected parent. Selection orders parents by
+descending router score with exact ties resolved by ascending parent index. Prefixes
+remain first, followed by all row-major parents and score-ranked selected details in M3
+horizontal/vertical/diagonal order.
+
+Budget units are never conflated: `K` selected parents, `3K` added details, `256+3K`
+spatial tokens, and `prefix+256+3K` total tokens. Fixed-K, threshold-with-bounds, and
+dual-threshold modes are deterministic. With positive violation defined as realized
+minus target usage, the projected update is
+`lambda <- clamp(lambda + dual_lr * violation, lambda_min, lambda_max)` and uses only
+completed training intervals.
+
+Masked padded execution and deterministic length-bucketed execution restore original
+sample order and report both effective and padded tokens. Hard top-K has no ordinary
+gradient; router fine-tuning/surrogates are not part of M6. The fixture trains only a
+small head, proves exact controller resume and frozen-state equality, and is synthetic,
+diagnostic, and non-reportable. No real benchmark, pretrained checkpoint, or dataset ran.
+
+## Next milestone: M7 (not started)
+
+M7 SubViT diagnostic reproduction, architecture expansion, and the decisive diagnostic
+remain unimplemented. No M7 CLI or model path was added.
 
 ## Hard gates and stop rules
 

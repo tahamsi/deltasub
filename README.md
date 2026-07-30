@@ -278,6 +278,56 @@ SHA256 of canonical immutable cache metadata, including its set of batch-context
 Records are ordered by batch, anchor position, then ascending parent index. Resume
 verifies metadata, explicit Parquet schemas, shard hashes, record keys, and invariants;
 temporary shards are ignored safely and incompatible/corrupt caches fail closed.
+
+## M6 deterministic adaptive execution
+
+M6 adds the production foundation under `deltasub.adaptive`. The router scores all 256
+parents before the transformer. Every parent remains; choosing `K` distinct parents adds
+exactly `3K` M3 details. The transformer sequence is:
+
+```text
+prefix tokens | 256 row-major parent tokens | score-ranked selected Haar details
+```
+
+Parents are ranked by descending score, with exact ties resolved by ascending parent
+index using an explicit backend-independent lexicographic policy. Each parent contributes
+horizontal, vertical, then diagonal detail. Hard selection runs without gradients; M6
+does not claim differentiable router fine-tuning.
+
+Budget fields name their units explicitly:
+
+```text
+selected_parents = K
+added_detail_tokens = 3K
+spatial_tokens = 256 + 3K
+total_tokens = prefix_tokens + 256 + 3K
+```
+
+Controllers support fixed K, threshold with K bounds, and dual threshold. Positive
+violation means realized training usage exceeds target usage:
+
+```text
+lambda_next = clamp(lambda + dual_lr * (realized_usage - target_usage),
+                    lambda_min, lambda_max)
+```
+
+Only successful training optimizer steps accumulate usage, and validation/inference
+never updates lambda. Padded execution uses validity masks; exact-length or configured
+length buckets execute separately and restore original order. Accounting distinguishes
+effective tokens from padded execution and router multiply-add estimates. Token counts
+are not reported as FLOPs or wall-clock savings.
+
+Run the synthetic, diagnostic, non-reportable fixture:
+
+```bash
+python -m deltasub.cli adaptive fixture --output artifacts/adaptive/m6_fixture
+python -m deltasub.cli adaptive fixture --output artifacts/adaptive/m6_fixture --resume
+```
+
+Configuration/checkpoint inspection is available through `adaptive validate` and
+`adaptive inspect`. `configs/adaptive/cub_m6.yaml` is a provenance-guarded production
+template only; it does not download data or checkpoints. No real benchmark result was
+produced. M7 SubViT reproduction and architecture expansion have not started.
 Invalid anchors are stored with `anchor_valid: false`; their finite diagnostic arithmetic
 must not be treated as a valid label.
 
