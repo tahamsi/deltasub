@@ -28,9 +28,30 @@ def file_sha256(path: str | Path) -> str:
 
 
 def _split_lists(value: object) -> tuple[list[int], list[int]]:
+    preserve_novel_order = False
     if isinstance(value, dict):
-        known = value.get("known_class_ids", value.get("known", value.get("train_classes")))
-        novel = value.get("novel_class_ids", value.get("novel", value.get("unlabeled_classes")))
+        known = value.get(
+            "known_class_ids",
+            value.get("known", value.get("train_classes", value.get("known_classes"))),
+        )
+        if "unknown_classes" in value:
+            unknown = value["unknown_classes"]
+            if not isinstance(unknown, dict):
+                raise ValueError("unknown_classes must be a difficulty-partition dictionary")
+            expected_partitions = {"Easy", "Medium", "Hard"}
+            if set(unknown) != expected_partitions:
+                raise ValueError(
+                    "unknown_classes must contain exactly Easy, Medium, and Hard partitions"
+                )
+            if any(not isinstance(unknown[name], list) for name in expected_partitions):
+                raise ValueError("unknown_classes difficulty partitions must be lists")
+            # Match the class ordering used by the pinned upstream SSB loader.
+            novel = unknown["Hard"] + unknown["Medium"] + unknown["Easy"]
+            preserve_novel_order = True
+        else:
+            novel = value.get(
+                "novel_class_ids", value.get("novel", value.get("unlabeled_classes"))
+            )
     elif isinstance(value, (list, tuple)) and len(value) == 2:
         known, novel = value
     else:
@@ -48,7 +69,7 @@ def _split_lists(value: object) -> tuple[list[int], list[int]]:
         raise ValueError("known and novel class IDs overlap")
     if any(item < 0 for item in known_ids + novel_ids):
         raise ValueError("split class IDs must be non-negative")
-    return sorted(known_ids), sorted(novel_ids)
+    return sorted(known_ids), novel_ids if preserve_novel_order else sorted(novel_ids)
 
 
 def load_split_definition(

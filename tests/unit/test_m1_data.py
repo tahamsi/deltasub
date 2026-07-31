@@ -107,6 +107,70 @@ class ManifestSchemaTests(unittest.TestCase):
 
 
 class SplitAndPreparationTests(unittest.TestCase):
+    def load_fixture_split(self, payload: dict) -> dict:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        path = Path(directory.name) / "split.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return load_split_definition(
+            path,
+            upstream_repository="upstream",
+            pinned_commit=REFERENCE_COMMIT,
+            expected_revision=REFERENCE_COMMIT,
+            labelled_proportion=0.5,
+        )
+
+    def test_pinned_ssb_dictionary_split(self):
+        report = self.load_fixture_split(
+            {
+                "known_classes": [3, 1],
+                "unknown_classes": {
+                    "Easy": [8, 7],
+                    "Medium": [6, 5],
+                    "Hard": [4, 2],
+                },
+                "closed_set_open_set_pairs": {"ignored": [999]},
+            }
+        )
+        self.assertEqual(report["known_class_ids"], [1, 3])
+        self.assertEqual(report["novel_class_ids"], [4, 2, 6, 5, 8, 7])
+
+    def test_pinned_ssb_split_requires_all_difficulty_partitions(self):
+        with self.assertRaisesRegex(ValueError, "exactly Easy, Medium, and Hard"):
+            self.load_fixture_split(
+                {
+                    "known_classes": [0],
+                    "unknown_classes": {"Easy": [1], "Medium": [2]},
+                }
+            )
+
+    def test_pinned_ssb_split_rejects_malformed_partition(self):
+        with self.assertRaisesRegex(ValueError, "difficulty partitions must be lists"):
+            self.load_fixture_split(
+                {
+                    "known_classes": [0],
+                    "unknown_classes": {"Easy": [1], "Medium": "2", "Hard": [3]},
+                }
+            )
+
+    def test_pinned_ssb_split_rejects_overlap_and_duplicates(self):
+        malformed_splits = (
+            ({"Easy": [1], "Medium": [2], "Hard": [0]}, "overlap"),
+            ({"Easy": [1], "Medium": [2], "Hard": [1]}, "duplicates"),
+        )
+        for unknown_classes, message in malformed_splits:
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                self.load_fixture_split(
+                    {"known_classes": [0], "unknown_classes": unknown_classes}
+                )
+
+    def test_existing_split_schema_regression(self):
+        report = self.load_fixture_split(
+            {"train_classes": [2, 0], "unlabeled_classes": [3, 1]}
+        )
+        self.assertEqual(report["known_class_ids"], [0, 2])
+        self.assertEqual(report["novel_class_ids"], [1, 3])
+
     def test_exact_split_hash_and_provenance(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "split.json"
