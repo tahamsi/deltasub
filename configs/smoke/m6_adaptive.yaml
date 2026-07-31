@@ -1,0 +1,51 @@
+schema_version: 1
+mode: fixture
+m2_checkpoint:
+  path: TEST_ONLY_GENERATED
+  expected_sha256: ""
+m5_router_checkpoint:
+  path: TEST_ONLY_GENERATED
+  expected_sha256: ""
+dinov2:
+  source_root: TEST_ONLY_COMPATIBLE_MODEL
+  expected_revision: fixture-dinov2
+  checkpoint_sha256: ""
+child_projector_provenance: M3 fixture Haar projector
+execution:
+  mode: bucketed
+  bucket_policy: exact_length
+  bucket_boundaries: []
+budget:
+  mode: mean_detail_tokens
+  unit: added_detail_tokens
+  target: 96
+  fixed_k: null
+  per_sample_k: [0, 1, 32, 256]
+  min_k: 0
+  max_k: 256
+controller:
+  mode: dual_threshold
+  score_threshold: 0.0
+  initial_lambda: 0.0
+  dual_learning_rate: 0.001
+  lambda_min: -1.0
+  lambda_max: 1.0
+  dual_update_interval: 4
+training:
+  precision: fp32
+  device: cpu
+  physical_batch_size: 4
+  gradient_accumulation: 1
+  optimizer: adamw
+  scheduler: none
+  learning_rate: 0.01
+  weight_decay: 0.0
+  gradient_clipping: 1.0
+  epochs: 1
+  trainable_components: [classification_head]
+loss_weights:
+  classification: 1.0
+  selex: 0.0
+checkpoint_directory: artifacts/adaptive/m6_fixture
+validation_metric: classification_loss
+seed: 606

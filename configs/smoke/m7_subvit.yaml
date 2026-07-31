@@ -1,0 +1,38 @@
+schema_version: 1
+mode: fixture
+seed: 17
+model:
+  name: tiny_subvit_fixture
+  fixture: true
+checkpoint:
+  path: null
+  sha256: null
+source:
+  root: null
+  revision: synthetic-fixture
+attention:
+  layer: 1
+  head_sample_count: 2
+  parent_count: 256
+ats:
+  factor: 2
+  retain_original_parents: true
+  child_order: [top_left, top_right, bottom_left, bottom_right]
+degradation:
+  operation: mask
+  chunk_size: 2
+router:
+  input_dim: 8
+  hidden_dim: 16
+  output_maps: 1
+loss:
+  map_weight: 1.0
+  ranking_weight: 0.25
+  topk_weight: 0.5
+  temperature: 1.0
+training:
+  device: cpu
+  precision: fp32
+  epochs: 2
+  learning_rate: 0.05
+output: artifacts/subvit/m7_fixture

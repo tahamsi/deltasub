@@ -32,6 +32,23 @@ class CLITests(unittest.TestCase):
             ["smoke", "--help"],
             ["data", "--help"],
             ["data", "download", "--help"],
+            ["data", "prepare", "--help"],
+            ["data", "prepare", "cub", "--help"],
+            ["data", "prepare", "aircraft", "--help"],
+            ["data", "prepare", "cars", "--help"],
+            ["data", "prepare", "cifar10", "--help"],
+            ["data", "prepare", "imagenet100", "--help"],
+            ["data", "validate", "--help"],
+            ["data", "validate-all", "--help"],
+            ["references", "--help"],
+            ["references", "inspect", "--help"],
+            ["backbone", "inspect", "--help"],
+            ["selex", "verify-equivalence", "--help"],
+            ["gains", "--help"],
+            ["gains", "collect", "--help"],
+            ["gains", "validate", "--help"],
+            ["gains", "inspect", "--help"],
+            ["train", "baseline", "--help"],
             ["paper", "--help"],
             ["paper", "build-all", "--help"],
         ]
@@ -48,6 +65,21 @@ class CLITests(unittest.TestCase):
         self.assertIn("python", value)
         self.assertIn("torch", value)
         self.assertIn("cuda_available", value)
+
+    def test_selex_equivalence_cuda_flags_are_explicit(self):
+        with mock.patch(
+            "deltasub.cli.verify_equivalence", return_value={"status": "passed"}
+        ) as operation:
+            code, output, _ = self.invoke(
+                ["selex", "verify-equivalence", "--cuda", "--bf16"]
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(output)["status"], "passed")
+        operation.assert_called_once_with(
+            "artifacts/gates/selex_equivalence.json",
+            include_cuda=True,
+            include_bf16=True,
+        )
 
     def test_memory_doctor_cpu_path_and_config_validation(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -109,6 +141,23 @@ class CLITests(unittest.TestCase):
             code, _, error = self.invoke(["data", "download", "imagenet100", "--root", directory])
             self.assertEqual(code, 2)
             self.assertIn("invalid choice", error)
+
+    def test_references_inspect_and_data_failures(self):
+        code, text, _ = self.invoke(["references", "inspect"])
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            {item["id"] for item in json.loads(text)["references"]},
+            {"selex", "generalized_category_discovery"},
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            code, _, error = self.invoke(["data", "prepare", "cub", "--root", directory])
+            self.assertEqual(code, 2)
+            self.assertIn("source checksum is unavailable", error)
+            code, _, error = self.invoke(
+                ["data", "validate", "cub", "--root", directory]
+            )
+            self.assertEqual(code, 2)
+            self.assertIn("manifest does not exist", error)
 
     def test_paper_build_all_writes_three_formats(self):
         with tempfile.TemporaryDirectory() as directory:

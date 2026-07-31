@@ -1,0 +1,13 @@
+schema_version: 1
+test_only_fixture: true
+parent_patch_size: 14
+child_patch_size: 7
+child_order: [top_left, top_right, bottom_left, bottom_right]
+haar_mode_order: [horizontal, vertical, diagonal]
+embedding_dimension: 16
+child_projector_trainable: true
+mode_embedding_initialization: zeros
+consistency_loss_weight: 0.0
+selected_parent_fixture_count: 5
+dtype: float32
+device: cpu

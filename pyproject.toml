@@ -30,4 +30,5 @@ addopts = "-ra"
 markers = [
   "gpu: requires a CUDA device",
   "a100: requires one NVIDIA A100",
+  "integration: requires an explicitly supplied local upstream source or fixture",
 ]

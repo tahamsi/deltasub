@@ -1,0 +1,33 @@
+schema_version: 1
+test_only: true
+dataset:
+  manifest: REQUIRED_TEST_FIXTURE
+  manifest_sha256: REQUIRED_TEST_FIXTURE
+  split_validation_report: REQUIRED_TEST_FIXTURE
+backbone:
+  name: test_only_tiny_backbone
+  embed_dim: 16
+  checkpoint: REQUIRED_TEST_FIXTURE
+  checkpoint_sha256: REQUIRED_TEST_FIXTURE
+  input_size: 224
+  patch_size: 14
+  trainable_blocks: full
+training:
+  device: cpu
+  precision: fp32
+  physical_batch_size: 2
+  gradient_accumulation: 2
+  effective_batch_size: 4
+  optimizer: sgd
+  scheduler: cosine
+  learning_rate: 0.01
+  epochs: 1
+selex:
+  temperature: 1.0
+  supervised_temperature: 0.07
+  supervised_weight: 0.35
+  unsupervised_smoothing: 1.0
+  hierarchy: powers_of_two
+  equivalence_gate: REQUIRED_TEST_FIXTURE
+output_directory: artifacts/runs/m2_test_only_smoke
+seed: 0

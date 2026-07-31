@@ -1,0 +1,42 @@
+schema_version: m8.common_protocol.v1
+common_protocol:
+  architecture: DINOv2 ViT-B/14
+  input_size: 224
+  parent_tokens: 256
+  prefix_tokens: 1
+  register_tokens: 0
+  selex: {version: exact_m2, temperature: 0.1, reduction: per_anchor_mean}
+  dataset_manifest_hash: REQUIRED
+  split_hash: REQUIRED
+  augmentations: {version: REQUIRED}
+  head: {type: linear, classes: REQUIRED}
+  optimizer: {name: REQUIRED}
+  scheduler: {name: REQUIRED}
+  precision: fp32
+  physical_batch_size: 1
+  effective_batch_size: 1
+  gradient_accumulation: 1
+  seed: 0
+  token_budget: 0
+  execution_mode: padded
+  checkpoint_hashes: {model: REQUIRED, adapter: REQUIRED}
+  source_revisions: {dinov2: 7764ea0f912e53c92e82eb78a2a1631e92725fc8}
+enabled_adapters: [vit_dinov2_selex, subvit_reimplementation, deltasub, msvit_gcd_reimplementation, dart_gcd_port]
+expected_adapter_statuses: {vit_dinov2_selex: fixture_only, subvit_reimplementation: fixture_only, deltasub: fixture_only, msvit_gcd_reimplementation: fixture_only, dart_gcd_port: fixture_only}
+source_roots: {dinov2: /home/ubuntu/references/dinov2-7764ea0f912e53c92e82eb78a2a1631e92725fc8, msvit: null, dart: null}
+source_revisions: {dinov2: 7764ea0f912e53c92e82eb78a2a1631e92725fc8, msvit: 483c2bc76cb215a489594be6009f06ad144c675f, dart: df9e34ded12f3d7813b5004eccf922a67fb8491f}
+checkpoint_paths: {vit_dinov2_selex: null, subvit_reimplementation: null, deltasub: null, msvit_gcd_reimplementation: null, dart_gcd_port: null}
+expected_hashes: {vit_dinov2_selex: null, subvit_reimplementation: null, deltasub: null, msvit_gcd_reimplementation: null, dart_gcd_port: null}
+execution_mode: padded
+budget_comparison_unit: effective_total_tokens
+target_budget: 257
+precision: fp32
+device: cuda:0
+batch_size: 1
+gradient_accumulation: 1
+loss: {name: SelEx, reduction: per_anchor_mean}
+optimizer: {name: REQUIRED}
+scheduler: {name: REQUIRED}
+output_directory: artifacts/baselines/m8_production
+seed: 0
+mode: production

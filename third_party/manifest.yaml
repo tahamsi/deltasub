@@ -17,7 +17,17 @@ references:
     original_backbone: "DINO-family ViT as configured upstream"
     integration: official_integration
     difficulty: high
-    notes: "Batch-dependent contrastive and hierarchical objectives require an exact per-anchor refactor."
+    notes: "Pinned requirements target torch 2.0.0/torchvision 0.15.1, not the repository's Python 3.12, torch 2.12, CUDA 13.2 environment. M2 includes an isolated minimal executable MIT reference snapshot; production never imports it."
+    inspected_sources:
+      - path: methods/contrastive_training/contrastive_training.py
+        sha256: "07e70108f4daf39185e64d49113d7c09003e6cee6e259950844534f0ae277079"
+        symbols: [LabelSmoothingLoss, SupConLoss, info_nce_logits, train, extract_labeled_protos]
+    reference_snapshot:
+      path: third_party/reference/selex_scalar_reference.py
+      sha256: "10bc945e95480a4d279a2c0b90e45e15050a04bd3197613c059cf94bde7a239a"
+      upstream_path: methods/contrastive_training/contrastive_training.py
+      scope: [LabelSmoothingLoss, SupConLoss, info_nce_logits, train_scalar_combination]
+      license: MIT
 
   - id: generalized_category_discovery
     paper: "https://arxiv.org/abs/2201.02609"
@@ -30,6 +40,10 @@ references:
     integration: official_integration
     difficulty: medium
     notes: "Use the v2 single-Hungarian-assignment evaluation and exact SSB splits."
+    inspected_sources:
+      - path: methods/contrastive_training/contrastive_training.py
+        sha256: "e3dde1b6d564a0bc8cdc07f0a1fe7904a59bc9e3584dfb45beaacb7ce35be013"
+        symbols: [SupConLoss, info_nce_logits, train]
 
   - id: dinov2
     paper: "https://arxiv.org/abs/2304.07193"
@@ -41,7 +55,17 @@ references:
     original_backbone: "ViT family; DeltaSub primary is ViT-B/14"
     integration: official_integration
     difficulty: medium
-    notes: "Primary ViT-B/14 geometry is patch size 14 and embedding dimension 768."
+    notes: "Official training environment targets torch 2.0 and xFormers 0.0.18; full upstream training is not compatible as pinned with Python 3.12/torch 2.12/CUDA 13.2. The adapter uses the inference module contract without xFormers-specific training."
+    inspected_sources:
+      - path: dinov2/models/vision_transformer.py
+        sha256: "7799a260f2d7d0fe197331d08502fb8c542f9b7424723650f6a39b64fa2639ea"
+        symbols: [DinoVisionTransformer, vit_base, forward_features, get_intermediate_layers]
+      - path: dinov2/hub/backbones.py
+        sha256: "871fca671b12a9ff02e810654baf509e97ccf461bf8196ce5ddeefff2fd87d3e"
+        symbols: [dinov2_vitb14, dinov2_vitb14_reg]
+      - path: hubconf.py
+        sha256: "c1f5090e78ff940b72c076d2bf9c0310d1707c946b3d10e2d6f2b0bdf56a6f64"
+        symbols: [dinov2_vitb14, dinov2_vitb14_reg]
 
   - id: vit
     paper: "https://arxiv.org/abs/2010.11929"

@@ -1,0 +1,34 @@
+schema_version: 1
+test_only: true
+dataset:
+  name: m4-test-only-fixture
+  manifest: TEST-ONLY
+  manifest_sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+  split_report: TEST-ONLY
+  split_report_sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+backbone:
+  name: test_only_m4_transformer
+  source_root: TEST-ONLY
+  checkpoint: TEST-ONLY
+  checkpoint_sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+selex:
+  equivalence_gate: TEST-ONLY
+  equivalence_gate_sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+subtokens:
+  config: configs/smoke/m3_subtokens.yaml
+  config_sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+collection:
+  batch_size: 3
+  candidate:
+    mode: list
+    parent_indices: [0, 7, 255]
+    sample_limit: null
+    batch_limit: null
+  seed: 17
+  precision: fp32
+  device: cpu
+  shard_size: 4
+  deterministic_algorithms: error
+  counterfactual_chunk_size: 2
+  resume_policy: verify
+output_root: artifacts/gains

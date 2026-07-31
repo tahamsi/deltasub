@@ -1,0 +1,51 @@
+schema_version: 1
+test_only: true
+gain_cache_path: artifacts/gains/REPLACE_WITH_M4_FIXTURE_CACHE
+expected_cache_id: ""
+feature_cache_path: ""
+splits:
+  train_fraction: 0.67
+  validation_fraction: 0.33
+  test_fraction: 0.0
+  seed: 3
+router:
+  input_dim: 8
+  hidden_dim: 16
+  depth: 2
+  normalization: layernorm
+  dropout: 0.0
+  coordinate_features: true
+  global_context_features: true
+  learned_position_embedding: false
+loss:
+  regression: huber
+  huber_delta: 1.0
+  regression_weight: 1.0
+  ranking_weight: 0.5
+  ranking_margin: 0.0
+  maximum_pairs_per_anchor: 16
+  sign_weight: 0.1
+  sign_epsilon: 0.0
+  gain_clip: null
+training:
+  physical_batch_size: 3
+  gradient_accumulation: 1
+  effective_batch_size: 3
+  optimizer: adamw
+  learning_rate: 0.01
+  weight_decay: 0.0
+  scheduler: none
+  epochs: 2
+  gradient_clipping: 1.0
+  precision: fp32
+  device: cpu
+sampling:
+  informative_fraction: 0.34
+replay:
+  capacity: 4
+  ratio: 0.25
+  priority_mode: stratified_priority
+  near_zero_epsilon: 1.0e-8
+checkpoint_directory: artifacts/router/m5_fixture
+validation_metric: spearman
+seed: 23

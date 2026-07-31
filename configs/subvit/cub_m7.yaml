@@ -1,0 +1,38 @@
+schema_version: 1
+mode: production
+seed: 0
+model:
+  name: dinov2_vitb14
+  fixture: false
+checkpoint:
+  path: REQUIRED_LOCAL_DINOV2_CHECKPOINT
+  sha256: REPLACE_WITH_64_HEX_SHA256
+source:
+  root: /home/ubuntu/references/dinov2-7764ea0f912e53c92e82eb78a2a1631e92725fc8
+  revision: 7764ea0f912e53c92e82eb78a2a1631e92725fc8
+attention:
+  layer: 11
+  head_sample_count: 4
+  parent_count: 256
+ats:
+  factor: 2
+  retain_original_parents: true
+  child_order: [top_left, top_right, bottom_left, bottom_right]
+degradation:
+  operation: mask
+  chunk_size: 4
+router:
+  input_dim: 768
+  hidden_dim: 128
+  output_maps: 1
+loss:
+  map_weight: 1.0
+  ranking_weight: 1.0
+  topk_weight: 1.0
+  temperature: 1.0
+training:
+  device: cuda:0
+  precision: bf16
+  epochs: 20
+  learning_rate: 0.0001
+output: artifacts/subvit/cub_m7
