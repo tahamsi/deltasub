@@ -27,6 +27,9 @@ from .router.training import inspect_router_checkpoint, train_from_cache, valida
 from .utils.hashing import sha256_file
 from .adaptive.config import load_adaptive_config
 from .adaptive.training import inspect_adaptive_checkpoint, run_fixture_training
+from .diagnostics.subvit.config import load_subvit_config
+from .diagnostics.subvit.fixture import run_fixture as run_subvit_fixture
+from .diagnostics.subvit.training import inspect_checkpoint as inspect_subvit_checkpoint
 
 
 def doctor() -> dict:
@@ -192,6 +195,20 @@ def build_parser() -> argparse.ArgumentParser:
     adaptive_fixture = adaptive_sub.add_parser("fixture", help="run synthetic diagnostic fixture")
     adaptive_fixture.add_argument("--output", default="artifacts/adaptive/m6_fixture")
     adaptive_fixture.add_argument("--resume", action="store_true")
+    subvit = sub.add_parser(
+        "subvit", help="M7 clean-room SubViT synthetic diagnostic reference (non-reportable)"
+    )
+    subvit_sub = subvit.add_subparsers(dest="subvit_command", required=True)
+    for name in ("validate", "extract", "degrade", "train-router", "compare"):
+        command = subvit_sub.add_parser(name)
+        command.add_argument("--config", default="configs/smoke/m7_subvit.yaml")
+        command.add_argument("--output", default="artifacts/subvit/m7_fixture")
+        command.add_argument("--resume", action="store_true")
+    subvit_fixture = subvit_sub.add_parser("fixture")
+    subvit_fixture.add_argument("--output", default="artifacts/subvit/m7_fixture")
+    subvit_fixture.add_argument("--resume", action="store_true")
+    subvit_inspect = subvit_sub.add_parser("inspect")
+    subvit_inspect.add_argument("checkpoint")
     train = sub.add_parser("train")
     train_sub = train.add_subparsers(dest="train_command", required=True)
     baseline = train_sub.add_parser("baseline")
@@ -350,6 +367,32 @@ def main(argv=None) -> int:
                 result = run_fixture_training(args.output, resume=args.resume)
         except (FileNotFoundError, ValueError, RuntimeError, OSError) as error:
             print(f"adaptive error: {error}", file=sys.stderr)
+            return 2
+    elif args.command == "subvit":
+        try:
+            if args.subvit_command == "inspect":
+                result = inspect_subvit_checkpoint(args.checkpoint)
+            elif args.subvit_command == "fixture":
+                result = run_subvit_fixture(args.output, resume=args.resume)
+            else:
+                config = load_subvit_config(args.config)
+                if args.subvit_command == "validate":
+                    result = {
+                        "status": "validated", "training_started": False,
+                        "mode": config["mode"],
+                        "label": ("SYNTHETIC DIAGNOSTIC NON-REPORTABLE"
+                                  if config["mode"] == "fixture" else
+                                  "M7 SUBVIT DIAGNOSTIC CONFIGURATION"),
+                    }
+                elif config["mode"] != "fixture":
+                    raise ValueError(
+                        "production M7 execution requires an explicitly supplied integration dataset"
+                    )
+                else:
+                    result = run_subvit_fixture(args.output, resume=args.resume)
+                    result["requested_stage"] = args.subvit_command
+        except (FileNotFoundError, ValueError, RuntimeError, OSError) as error:
+            print(f"subvit error: {error}", file=sys.stderr)
             return 2
     elif args.command == "selex":
         try:

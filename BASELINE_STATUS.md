@@ -1,6 +1,6 @@
 # Baseline status
 
-Status date: 2026-07-29. Shared synthetic infrastructure has been implemented and tested,
+Status date: 2026-07-30. Shared synthetic infrastructure has been implemented and tested,
 but no publication baseline has been completed or run. No benchmark results are claimed.
 Pinned details are recorded in `third_party/manifest.yaml`.
 
@@ -20,8 +20,8 @@ M2 now has a real training path; only test-only CPU fixtures ran.
 | SATA-GCD-Port | Paper available; cited repository unavailable | Robust image classification; token grouping before FFN | Unavailable | Blocked | No verifiable official, licensed code at cited URL |
 | SpiralFovea-GCD-Reimplementation | Paper found; no verified code | Fine-grained classification; entropy-driven foveated grid | Clean-room reimplementation | Not started | Replaces grid with mixed-scale tokens; recent paper-only method |
 | ARTA-Cls-Port | Paper found; no verified code | Dense semantic feature extraction/segmentation | Classification port only if defensible | Not started | Boundary allocation is designed for dense labels, not GCD |
-| SubViT-Reimplementation | Paper found; no verified code | Fine-grained GCD with deletion-degradation router | Clean-room reimplementation | Not started | Must reproduce two-stage subdivision without claiming official status |
-| DeltaSub | New method | Fine-grained GCD | Native implementation | M6 deterministic adaptive budget execution complete with a non-reportable CPU fixture; M7+ not started | CUDA and real pretrained checkpoint/data remain environment-dependent; central hypothesis is untested |
+| SubViT-Reimplementation (M7 diagnostic reference) | Paper found; no verified official code | Fine-grained GCD with deletion-degradation router | Clean-room paper-described diagnostic reference | M7 framework complete; synthetic non-reportable fixture only | Not official or exact reproduction; real diagnostic remains N/A |
+| DeltaSub | New method | Fine-grained GCD | Native implementation | M6 execution and M7 comparison framework complete with non-reportable CPU fixtures; M8/M9 not started | CUDA and real pretrained checkpoint/data remain environment-dependent; central hypothesis is untested |
 
 ## M6 adaptive execution foundation
 
@@ -47,6 +47,21 @@ only in the table labelled **Original protocols; results are not directly compar
 
 An adapter remains `N/A` when faithful implementation is impossible. Vanilla ViT is never
 used as a silent replacement. Failed experiments remain visible with their failure reason.
+
+## M7 SubViT diagnostic reference
+
+The isolated `deltasub.diagnostics.subvit` package implements the paper-described
+mechanism without modifying DINOv2 or DeltaSub caches/checkpoints. ATS retains all
+original parents. Each chosen parent adds `f*f` direct children in row-major order;
+`f=2` therefore adds four. DeltaSub instead adds three horizontal/vertical/diagonal
+Haar details. These representations and counts are never treated as equivalent.
+
+Stage 2 freezes its teacher, compares original and degraded CLS features, and chooses
+maximum FP32 L2 degradation with lowest-head tie breaking. Extra teacher forwards are
+training diagnostics only. The distilled router consumes only 256 pre-transformer
+parents, emits one map, and uses one transformer pass at inference. Undefined metrics
+serialize as `null` plus a reason, never NaN. Attention is not ground truth; validation
+cannot alter M4–M6 decisions. No paper table or benchmark was reproduced.
 
 ## M3 token foundation
 

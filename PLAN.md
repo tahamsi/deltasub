@@ -1,6 +1,6 @@
 # DeltaSub implementation plan
 
-Status date: 2026-07-29
+Status date: 2026-07-30
 
 DeltaSub tests whether counterfactual subdivision gain is a better routing target than
 attention, deletion importance, or cheap detail scores for fine-grained generalized
@@ -26,8 +26,8 @@ deterministic diagnostic.
 - [x] M6: deterministic fixed/threshold/dual budget control, score-ranked hard top-K,
   adaptive sequence assembly, exact-length/configured buckets, effective/padded
   accounting, strict checkpoint/resume, and a synthetic non-reportable fixture.
-- [ ] M7: SubViT reimplementation and decisive deletion-versus-gain diagnostic; write an
-  evidence-based `DIAGNOSTIC_VERDICT.md`.
+- [x] M7: deterministic clean-room SubViT diagnostic reference and comparison framework.
+  Only synthetic non-reportable fixtures ran; a real verdict remains unavailable.
 - [ ] M8: core adapters (ViT, SubViT, DeltaSub, MSViT, DART).
 - [ ] M9: three-seed core experiments on CUB, Aircraft, Cars; essential ablations and
   efficiency profiling.
@@ -144,10 +144,25 @@ gradient; router fine-tuning/surrogates are not part of M6. The fixture trains o
 small head, proves exact controller resume and frozen-state equality, and is synthetic,
 diagnostic, and non-reportable. No real benchmark, pretrained checkpoint, or dataset ran.
 
-## Next milestone: M7 (not started)
+## M7 diagnostic reference completion
 
-M7 SubViT diagnostic reproduction, architecture expansion, and the decisive diagnostic
-remain unimplemented. No M7 CLI or model path was added.
+M7 implements an isolated, source-attributed clean-room reference to the mechanism
+described in the SubViT paper. It is neither the unavailable official implementation
+nor an exact paper reproduction. ATS keeps all original parents and appends `f*f`
+direct spatial children per selected parent. At `f=2`, this is four children, not
+DeltaSub's three Haar details.
+
+The framework extracts per-head CLS-to-parent attention from a configurable official
+DINOv2 block, supports seeded head schedules, performs deterministic head-wise
+feature-degradation selection, and distils the selected map into a separate
+pre-transformer single-map router. The loss uses FP32 temperature-scaled map KL,
+strict-pair logistic ranking, and a 256-entry top-K mask BCE. Ties select the lowest
+parent/head index; empty strict-pair sets contribute finite zero.
+
+Only synthetic fixtures exercised geometry, degradation, router optimization, exact
+resume, comparisons, and artifact hashing. Teacher deletion forwards are training
+diagnostics only. Router inference emits one map and needs one transformer pass. No
+benchmark, paper table, or scientific verdict was produced. M8 and M9 remain incomplete.
 
 ## Hard gates and stop rules
 

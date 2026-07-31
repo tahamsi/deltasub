@@ -5,7 +5,8 @@ routing in fine-grained generalized category discovery. The repository currently
 provides tested token geometry, Haar detail tokens, exact per-anchor SelEx reduction,
 deterministic paired counterfactual gain collection, content-addressed gain caches,
 pre-transformer gain-router training, manifests, result schemas, and synthetic
-diagnostics. Adaptive budgets and benchmark experiments are not implemented.
+diagnostics, deterministic adaptive execution, and an isolated clean-room SubViT
+diagnostic reference. Benchmark experiments are not implemented.
 
 It does **not** contain completed CUB, Aircraft, Cars, CIFAR-10, or ImageNet-100
 experiments. Synthetic metrics are marked `synthetic_only: true` and are excluded from
@@ -104,6 +105,36 @@ MAE, RMSE, Huber, Pearson, Spearman, pairwise concordance, NDCG, sign quality, a
 quantile calibration are validation metrics. Top-K recall is diagnostic only: M5 does
 not execute top-K routing, insert detail tokens, control a budget, or claim compute
 savings. Those production execution mechanisms remain M6 work.
+
+## M7 SubViT diagnostic reference
+
+M7 is a source-attributed clean-room implementation of behavior described by the SubViT
+paper; it is not official and does not claim exact paper reproduction. SubViT ATS keeps
+every original parent and adds `f*f` direct spatial children for each selected parent.
+With `f=2`, that is four children. DeltaSub instead adds three Haar detail tokens, so
+the mechanisms and token budgets are explicitly different.
+
+The diagnostic uses per-head CLS-to-parent attention, seeded Stage-1 head sampling, and
+Stage-2 maximum feature degradation. Stage 2 masks only deterministic top-K parents,
+computes FP32 L2 distance from the same frozen teacher, and breaks ties by lowest head.
+Those extra teacher forwards occur only during training diagnostics. The separate
+distilled router accepts only pre-transformer parents, emits one `[B,256]` map, and
+needs one transformer pass at inference.
+
+The router objective combines temperature-scaled map KL (`batchmean`, multiplied by
+`T^2`), mean logistic loss over strict teacher-order pairs, and mean BCE over all 256
+top-K mask entries. Top-K ties use ascending parent index; no-pair examples contribute
+finite zero. Undefined diagnostics are JSON `null` with a reason, never NaN. Attention
+is not ground truth, and diagnostics cannot alter M4–M6 production decisions.
+
+```bash
+python -m deltasub.cli subvit fixture --output artifacts/subvit/m7_fixture
+python -m deltasub.cli subvit fixture --output artifacts/subvit/m7_fixture --resume
+python -m deltasub.cli subvit inspect artifacts/subvit/m7_fixture/training/checkpoint_last.pt
+```
+
+Every fixture says `SYNTHETIC DIAGNOSTIC NON-REPORTABLE`. No dataset/checkpoint is
+downloaded, no paper table is reproduced, and M8/M9 remain incomplete.
 
 ## Result artifacts
 
@@ -222,8 +253,9 @@ an expected checkpoint SHA256 has not been independently pinned here. Supply the
 file and its SHA256 in the resolved experiment configuration. The adapter never falls
 back to random weights.
 
-M4 gain collection is exposed under `gains`; router training, diagnosis, audits, GCD
-evaluation, and efficiency evaluation remain unavailable.
+M4 gain collection is exposed under `gains`; M5 router, M6 adaptive execution, and M7
+SubViT diagnostics have dedicated command groups. M8 adapters, real GCD evaluation, and
+benchmark efficiency evaluation remain unavailable.
 
 ## M3 direct Haar subtokens
 
