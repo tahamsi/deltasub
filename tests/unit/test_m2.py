@@ -136,6 +136,7 @@ class OfficialDINOv2Tests(unittest.TestCase):
     def test_official_architecture_complete_state_and_failures(self):
         source = self.source()
         model, _ = construct_official_vitb14(source)
+        self.assertEqual(model.pos_embed.shape, (1, 1370, 768))
         self.assertEqual(model.patch_embed(torch.zeros(1, 3, 224, 224)).shape, (1, 256, 768))
         with tempfile.TemporaryDirectory() as directory:
             checkpoint = Path(directory) / "complete.pt"
@@ -143,6 +144,13 @@ class OfficialDINOv2Tests(unittest.TestCase):
             digest = sha256_file(checkpoint)
             _, report = inspect_official_checkpoint(checkpoint, digest, source_root=source)
             self.assertTrue(report.compatible)
+            self.assertEqual(report.native_checkpoint_image_size, 518)
+            self.assertEqual(report.native_checkpoint_grid_size, (37, 37))
+            self.assertEqual(report.runtime_image_size, 224)
+            self.assertEqual(report.runtime_grid_size, (16, 16))
+            self.assertTrue(report.positional_interpolation_required)
+            self.assertTrue(report.positional_interpolation_verified)
+            self.assertTrue(report.strict_checkpoint_load)
             for mutation, message in (("missing", "missing"), ("unexpected", "unexpected"), ("shape", "shape")):
                 state = model.state_dict()
                 if mutation == "missing":
@@ -155,6 +163,12 @@ class OfficialDINOv2Tests(unittest.TestCase):
                 torch.save({"state_dict": state}, path)
                 _, bad = inspect_official_checkpoint(path, sha256_file(path), source_root=source)
                 self.assertFalse(bad.compatible, message)
+            nonsquare_state = model.state_dict()
+            nonsquare_state["pos_embed"] = nonsquare_state["pos_embed"][:, :-1]
+            nonsquare = Path(directory) / "nonsquare.pt"
+            torch.save(nonsquare_state, nonsquare)
+            with self.assertRaisesRegex(ValueError, "not a perfect square"):
+                inspect_official_checkpoint(nonsquare, sha256_file(nonsquare), source_root=source)
             with self.assertRaisesRegex(ValueError, "SHA256 mismatch"):
                 inspect_official_checkpoint(checkpoint, "0" * 64, source_root=source)
             malformed = Path(directory) / "malformed.pt"
