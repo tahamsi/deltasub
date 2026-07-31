@@ -1,0 +1,42 @@
+schema_version: m8.common_protocol.v1
+common_protocol:
+  architecture: DINOv2 ViT-B/14
+  input_size: 224
+  parent_tokens: 256
+  prefix_tokens: 1
+  register_tokens: 0
+  selex: {version: exact_m2, temperature: 0.1, reduction: per_anchor_mean}
+  dataset_manifest_hash: fixture-synthetic
+  split_hash: fixture-synthetic
+  augmentations: {version: fixture-v1, deterministic: true}
+  head: {type: linear, classes: 5}
+  optimizer: {name: sgd, learning_rate: 0.01}
+  scheduler: {name: constant}
+  precision: fp32
+  physical_batch_size: 3
+  effective_batch_size: 3
+  gradient_accumulation: 1
+  seed: 0
+  token_budget: 4
+  execution_mode: padded
+  checkpoint_hashes: {model: fixture-generated-complete, adapter: fixture-generated-complete}
+  source_revisions: {dinov2: 7764ea0f912e53c92e82eb78a2a1631e92725fc8}
+enabled_adapters: [vit_dinov2_selex, subvit_reimplementation, deltasub, msvit_gcd_reimplementation, dart_gcd_port]
+expected_adapter_statuses: {vit_dinov2_selex: fixture_only, subvit_reimplementation: fixture_only, deltasub: fixture_only, msvit_gcd_reimplementation: fixture_only, dart_gcd_port: fixture_only}
+source_roots: {dinov2: /home/ubuntu/references/dinov2-7764ea0f912e53c92e82eb78a2a1631e92725fc8, msvit: null, dart: null}
+source_revisions: {dinov2: 7764ea0f912e53c92e82eb78a2a1631e92725fc8, msvit: 483c2bc76cb215a489594be6009f06ad144c675f, dart: df9e34ded12f3d7813b5004eccf922a67fb8491f}
+checkpoint_paths: {vit_dinov2_selex: fixture-generated, subvit_reimplementation: fixture-generated, deltasub: fixture-generated, msvit_gcd_reimplementation: fixture-generated, dart_gcd_port: fixture-generated}
+expected_hashes: {vit_dinov2_selex: fixture-generated, subvit_reimplementation: fixture-generated, deltasub: fixture-generated, msvit_gcd_reimplementation: fixture-generated, dart_gcd_port: fixture-generated}
+execution_mode: padded
+budget_comparison_unit: effective_total_tokens
+target_budget: 261
+precision: fp32
+device: cpu
+batch_size: 3
+gradient_accumulation: 1
+loss: {name: selex-compatible-fixture, reduction: per_anchor_mean}
+optimizer: {name: sgd, learning_rate: 0.01}
+scheduler: {name: constant}
+output_directory: artifacts/baselines/m8_fixture
+seed: 0
+mode: fixture

@@ -30,6 +30,10 @@ from .adaptive.training import inspect_adaptive_checkpoint, run_fixture_training
 from .diagnostics.subvit.config import load_subvit_config
 from .diagnostics.subvit.fixture import run_fixture as run_subvit_fixture
 from .diagnostics.subvit.training import inspect_checkpoint as inspect_subvit_checkpoint
+from .baselines.config import load_config as load_m8_config
+from .baselines.registry import adapter_statuses, build_registry
+from .baselines.comparison import compare_fixture
+from .baselines.training import run_fixture_training as run_m8_training
 
 
 def doctor() -> dict:
@@ -209,6 +213,26 @@ def build_parser() -> argparse.ArgumentParser:
     subvit_fixture.add_argument("--resume", action="store_true")
     subvit_inspect = subvit_sub.add_parser("inspect")
     subvit_inspect.add_argument("checkpoint")
+    baselines = sub.add_parser("baselines", help="M8 common-protocol baseline adapters")
+    baselines_sub = baselines.add_subparsers(dest="baselines_command", required=True)
+    baselines_list = baselines_sub.add_parser("list", help="list evidence-derived adapter status")
+    baselines_list.add_argument("--config", default="configs/smoke/m8_baselines.yaml")
+    baselines_validate = baselines_sub.add_parser("validate", help="validate configuration and availability")
+    baselines_validate.add_argument("--config", default="configs/smoke/m8_baselines.yaml")
+    baselines_fixture = baselines_sub.add_parser("fixture", help="run synthetic non-reportable adapter fixture")
+    baselines_fixture.add_argument("--config", default="configs/smoke/m8_baselines.yaml")
+    baselines_fixture.add_argument("--output", default="artifacts/baselines/m8_fixture")
+    baselines_fixture.add_argument("--resume", action="store_true")
+    baselines_run = baselines_sub.add_parser("run", help="run an available adapter; production fails closed")
+    baselines_run.add_argument("--config", default="configs/baselines/common_m8.yaml")
+    baselines_run.add_argument("--method", choices=sorted({"vit_dinov2_selex","subvit_reimplementation","deltasub","msvit_gcd_reimplementation","dart_gcd_port"}))
+    baselines_run.add_argument("--resume", action="store_true")
+    baselines_compare = baselines_sub.add_parser("compare", help="deterministic matched-budget comparison")
+    baselines_compare.add_argument("--config", default="configs/smoke/m8_baselines.yaml")
+    baselines_compare.add_argument("--output")
+    baselines_inspect = baselines_sub.add_parser("inspect", help="inspect adapter status or fixture checkpoint")
+    baselines_inspect.add_argument("--config", default="configs/smoke/m8_baselines.yaml")
+    baselines_inspect.add_argument("--method", choices=sorted({"vit_dinov2_selex","subvit_reimplementation","deltasub","msvit_gcd_reimplementation","dart_gcd_port"}))
     train = sub.add_parser("train")
     train_sub = train.add_subparsers(dest="train_command", required=True)
     baseline = train_sub.add_parser("baseline")
@@ -394,6 +418,39 @@ def main(argv=None) -> int:
         except (FileNotFoundError, ValueError, RuntimeError, OSError) as error:
             print(f"subvit error: {error}", file=sys.stderr)
             return 2
+    elif args.command == "baselines":
+        try:
+            config = load_m8_config(args.config)
+            roots = config["source_roots"]
+            if args.baselines_command == "list":
+                result = {"schema_version": config["schema_version"], "adapters": adapter_statuses(roots)}
+            elif args.baselines_command == "validate":
+                statuses = adapter_statuses(roots)
+                expected = config["expected_adapter_statuses"]
+                mismatches = {x["method_id"]: {"expected": expected.get(x["method_id"]), "actual": x["status"]}
+                              for x in statuses if expected.get(x["method_id"]) != x["status"]}
+                if mismatches: raise ValueError(f"adapter status mismatch: {mismatches}")
+                result = {"status": "validated", "mode": config["mode"], "training_started": False,
+                          "config_hash": config["config_hash"], "adapters": statuses}
+            elif args.baselines_command == "compare":
+                if config["mode"] != "fixture": raise ValueError("production comparison requires validated real integrations")
+                result = compare_fixture(seed=config["seed"], batch_size=config["batch_size"],
+                    token_budget=config["common_protocol"]["token_budget"], execution_mode=config["execution_mode"],source_roots=roots)
+                if args.output:
+                    target=Path(args.output); target.parent.mkdir(parents=True,exist_ok=True); target.write_text(json.dumps(result,indent=2,sort_keys=True))
+            elif args.baselines_command == "fixture":
+                if config["mode"] != "fixture": raise ValueError("fixture command requires fixture mode")
+                result = run_m8_training(args.output, resume=args.resume, seed=config["seed"])
+            elif args.baselines_command == "run":
+                method=args.method or config["enabled_adapters"][0]; adapter=build_registry(roots)[method]
+                adapter.require_available(config["mode"])
+                if config["mode"] != "fixture": raise ValueError("production data execution is not available in M8 evidence")
+                result=run_m8_training(config["output_directory"],method,resume=args.resume,seed=config["seed"])
+            else:
+                statuses=adapter_statuses(roots); result={"adapters":statuses}
+                if args.method: result={"adapter":next(x for x in statuses if x["method_id"]==args.method)}
+        except (FileNotFoundError, ValueError, RuntimeError, OSError) as error:
+            print(f"baselines error: {error}", file=sys.stderr); return 2
     elif args.command == "selex":
         try:
             result = verify_equivalence(

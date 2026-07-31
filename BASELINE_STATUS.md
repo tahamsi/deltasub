@@ -1,6 +1,6 @@
 # Baseline status
 
-Status date: 2026-07-30. Shared synthetic infrastructure has been implemented and tested,
+Status date: 2026-07-31. Shared synthetic infrastructure has been implemented and tested,
 but no publication baseline has been completed or run. No benchmark results are claimed.
 Pinned details are recorded in `third_party/manifest.yaml`.
 
@@ -21,7 +21,7 @@ M2 now has a real training path; only test-only CPU fixtures ran.
 | SpiralFovea-GCD-Reimplementation | Paper found; no verified code | Fine-grained classification; entropy-driven foveated grid | Clean-room reimplementation | Not started | Replaces grid with mixed-scale tokens; recent paper-only method |
 | ARTA-Cls-Port | Paper found; no verified code | Dense semantic feature extraction/segmentation | Classification port only if defensible | Not started | Boundary allocation is designed for dense labels, not GCD |
 | SubViT-Reimplementation (M7 diagnostic reference) | Paper found; no verified official code | Fine-grained GCD with deletion-degradation router | Clean-room paper-described diagnostic reference | M7 framework complete; synthetic non-reportable fixture only | Not official or exact reproduction; real diagnostic remains N/A |
-| DeltaSub | New method | Fine-grained GCD | Native implementation | M6 execution and M7 comparison framework complete with non-reportable CPU fixtures; M8/M9 not started | CUDA and real pretrained checkpoint/data remain environment-dependent; central hypothesis is untested |
+| DeltaSub | New method | Fine-grained GCD | Native implementation | M8 common adapter validated with non-reportable CPU fixtures; M9 not started | CUDA and real pretrained checkpoint/data remain environment-dependent; central hypothesis is untested |
 
 ## M6 adaptive execution foundation
 
@@ -37,6 +37,19 @@ wall-clock-saving claim. Padded and bucketed valid outputs are compared while pa
 excluded from meaningful outputs. The synthetic fixture uses a frozen test router and
 transformer, a trainable classification head, and a bounded dual controller. No M4 gain
 record or M5 cache is modified.
+
+## M8 evidence-derived status
+
+| M8 adapter | Exact implementation label | Status | Token semantics / limitation |
+|---|---|---|---|
+| ViT / DINOv2 + SelEx | official DINOv2 architecture common-protocol adapter | `fixture_only` | All 256 parents; real checkpoint/protocol provenance absent. |
+| DeltaSub | native DeltaSub M3-M6 adapter | `fixture_only` | All parents plus three Haar details per selection; real M2/M5 checkpoints absent. |
+| SubViT-Reimplementation | clean-room paper-described diagnostic reimplementation | `fixture_only` | All parents plus four direct f=2 children; official source and real router/teacher absent. |
+| MSViT-GCD-Reimplementation | clean-room common-protocol mixed-scale fixture | `fixture_only` | Complete-coverage mixed-scale fixture; upstream is only a batch-shaping utility and grants no patent license. |
+| DART-GCD-Port | synthetic tokenizer interface fixture; not a verified faithful port | `fixture_only` | Synthetic region interface only; pinned behavior/hashes not locally verified. Root Apache-2.0 conflicts with README's MIT statement. |
+
+Synthetic records are always `reportable: false`; production requests fail before
+execution. LF-ViT and SATA remain blocked and non-executable. M9 was not started.
 
 ## Comparison policy
 

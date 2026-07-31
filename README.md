@@ -134,7 +134,8 @@ python -m deltasub.cli subvit inspect artifacts/subvit/m7_fixture/training/check
 ```
 
 Every fixture says `SYNTHETIC DIAGNOSTIC NON-REPORTABLE`. No dataset/checkpoint is
-downloaded, no paper table is reproduced, and M8/M9 remain incomplete.
+downloaded and no paper table is reproduced. M8 later added only adapter fixtures; M9
+remains incomplete.
 
 ## Result artifacts
 
@@ -359,7 +360,8 @@ python -m deltasub.cli adaptive fixture --output artifacts/adaptive/m6_fixture -
 Configuration/checkpoint inspection is available through `adaptive validate` and
 `adaptive inspect`. `configs/adaptive/cub_m6.yaml` is a provenance-guarded production
 template only; it does not download data or checkpoints. No real benchmark result was
-produced. M7 SubViT reproduction and architecture expansion have not started.
+produced. This paragraph describes the earlier M6 milestone; M7 and M8 were subsequently
+implemented as synthetic diagnostic infrastructure only.
 Invalid anchors are stored with `anchor_valid: false`; their finite diagnostic arithmetic
 must not be treated as a valid label.
 
@@ -397,6 +399,24 @@ batch-length per-anchor vector exactly recovers the upstream subset mean.
 
 No CUB, Aircraft, Cars, CIFAR-10, or ImageNet-100 training or evaluation was launched in
 M2, and no synthetic value is reported as a benchmark result.
+
+## M8 common baseline adapters
+
+`deltasub.baselines` provides the strict M8 adapter/result contract. Every current
+adapter is `fixture_only`; production execution fails closed without real provenance.
+
+```bash
+python -m deltasub.cli baselines list
+python -m deltasub.cli baselines validate
+python -m deltasub.cli baselines fixture --output artifacts/baselines/m8_fixture
+python -m deltasub.cli baselines compare --output artifacts/baselines/m8_comparison.json
+```
+
+The fixture compares identical synthetic inputs and records effective/padded lengths,
+approximate attention-token pairs, plan/frozen-state hashes, and deterministic execution
+errors. Selected regions, added/retained/removed tokens, sequence lengths, approximate
+cost, and measured latency remain distinct. No adapter silently falls back to ViT.
+No real benchmark ran and M9 remains incomplete.
 
 ## Scientific execution order
 

@@ -28,7 +28,8 @@ deterministic diagnostic.
   accounting, strict checkpoint/resume, and a synthetic non-reportable fixture.
 - [x] M7: deterministic clean-room SubViT diagnostic reference and comparison framework.
   Only synthetic non-reportable fixtures ran; a real verdict remains unavailable.
-- [ ] M8: core adapters (ViT, SubViT, DeltaSub, MSViT, DART).
+- [x] M8: common-protocol adapters and synthetic comparison fixtures for ViT, SubViT,
+  DeltaSub, MSViT, and DART. All remain evidence-derived `fixture_only`.
 - [ ] M9: three-seed core experiments on CUB, Aircraft, Cars; essential ablations and
   efficiency profiling.
 - [ ] M10: defensible lower-priority ports, secondary datasets, transfer and robustness.
@@ -162,7 +163,20 @@ parent/head index; empty strict-pair sets contribute finite zero.
 Only synthetic fixtures exercised geometry, degradation, router optimization, exact
 resume, comparisons, and artifact hashing. Teacher deletion forwards are training
 diagnostics only. Router inference emits one map and needs one transformer pass. No
-benchmark, paper table, or scientific verdict was produced. M8 and M9 remain incomplete.
+benchmark, paper table, or scientific verdict was produced. M8 subsequently added only
+common-protocol adapter fixtures; M9 remains incomplete.
+
+## M8 common baseline adapters
+
+M8 defines a versioned strict input/output contract, evidence-derived availability,
+common training artifacts, and comparisons by effective tokens, padded tokens,
+approximate attention-token pairs, or optional synchronized latency. Token counts are
+not FLOPs and equal selected-region K does not establish equal compute.
+
+The exact labels are `ViT / DINOv2 + SelEx`, `DeltaSub`,
+`SubViT-Reimplementation`, `MSViT-GCD-Reimplementation`, and `DART-GCD-Port`.
+The DART adapter is explicitly a synthetic interface fixture, not a verified faithful
+port. Production requests fail closed. No real benchmark ran and M9 remains incomplete.
 
 ## Hard gates and stop rules
 
