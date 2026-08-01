@@ -207,3 +207,24 @@ def test_paired_features_use_two_view_contract() -> None:
     assert output.fused_features.shape == (4, 8)
     assert output.selection.selected_mask.shape == (4, 256)
     assert output.selection.adaptive_k.tolist() == [2, 2, 2, 2]
+
+
+
+def test_detail_path_normalizes_autocast_output_dtype() -> None:
+    torch.manual_seed(6)
+    model = make_model(maximum_k=4)
+    images = torch.randn(2, 3, 224, 224)
+
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        output = model.features(
+            images,
+            return_auxiliary=True,
+        )
+
+    assert (
+        output.detail_features.dtype
+        == output.global_features.dtype
+    )
+    assert output.fused_features.dtype == torch.float32
+    assert torch.isfinite(output.detail_features).all()
+    assert torch.isfinite(output.fused_features).all()

@@ -263,7 +263,8 @@ class NoveltyPreservingDeltaSub(nn.Module):
                 dim=1,
             )
 
-            result[rows] = self._encode(tokens)
+            encoded = self._encode(tokens)
+            result[rows] = encoded.to(dtype=result.dtype)
 
         return result
 
