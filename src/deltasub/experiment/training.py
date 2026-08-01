@@ -228,7 +228,8 @@ def run_production(config: dict, method: str, output: str | Path, *, resume=Fals
         num_workers=int(spec["num_workers"]),worker_init_fn=_worker_seed)
     epochs=int(spec["epochs"]); scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,max(1,epochs*len(loader)))
     start=step=0; best=float("inf"); last=output/"checkpoint_last.pt"; history=[]
-    if resume:
+    # --resume is idempotent: resume when a checkpoint exists, otherwise start fresh.
+    if resume and last.is_file():
         state=load_checkpoint(last,map_location=device)
         if state.get("config_hash")!=stable_hash(config): raise ValueError("resume config mismatch")
         model.load_state_dict(state["model"],strict=True); optimizer.load_state_dict(state["optimizer"]); scheduler.load_state_dict(state["scheduler"])
