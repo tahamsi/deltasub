@@ -23,5 +23,12 @@ diagnostic:
   minimum_free_bytes: 10737418240
   precision: bf16_input_fp32_loss_and_metrics
   baseline: {frozen_backbone: true, epochs: 20, physical_batch_size: 32, gradient_accumulation: 4}
-  deltasub: {gain_candidates_per_image: 4, gain_sample_limit: 512, router_epochs: 10, adaptive_epochs: 10, fixed_k: 16}
+  deltasub:
+    gain_candidates_per_image: 256
+    gain_sample_limit: 128
+    router_epochs: 20
+    adaptive_epochs: 20
+    physical_batch_size: 32
+    gradient_accumulation: 4
+    fixed_k: 16
 output_root: artifacts/diagnostic/m9

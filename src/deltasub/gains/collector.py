@@ -104,6 +104,30 @@ def _git_commit() -> str:
                           text=True).stdout.strip()
 
 
+def _deterministic_sample_records(records, sample_limit, seed):
+    """Select a bounded sample by seeded sample-ID hash, never manifest order."""
+    records = list(records)
+    if sample_limit is None:
+        return records
+
+    limit = int(sample_limit)
+    if limit <= 0:
+        raise ValueError("sample_limit must be positive when supplied")
+
+    ranked = sorted(
+        records,
+        key=lambda record: (
+            stable_hash({
+                "schema": "m9.gain-sample.v1",
+                "seed": int(seed),
+                "sample_id": record["sample_id"],
+            }),
+            record["sample_id"],
+        ),
+    )
+    return ranked[:min(limit, len(ranked))]
+
+
 def _collect_production(config_path, config, *, checkpoint, expected_sha256, source_root,
                         resume):
     collection, backbone, dataset_config = (
@@ -145,9 +169,12 @@ def _collect_production(config_path, config, *, checkpoint, expected_sha256, sou
     records = image_dataset.records
     batch_size = int(collection["batch_size"])
     plan = load_gain_config(config_path)[1]
-    if plan.sample_limit is not None:
-        records = records[:plan.sample_limit]
-        image_dataset.records = records
+    records = _deterministic_sample_records(
+        records,
+        plan.sample_limit,
+        int(collection["seed"]),
+    )
+    image_dataset.records = records
     batches = [
         list(range(start, min(start + batch_size, len(records))))
         for start in range(0, len(records), batch_size)
