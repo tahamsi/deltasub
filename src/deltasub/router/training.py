@@ -142,7 +142,8 @@ def train_records(config: dict, records, feature_batches, cache, validation, *, 
         "training_device": str(device), "precision": config["training"]["precision"],
     }
     last_path = output / "checkpoint_last.pt"
-    if resume:
+    # --resume is idempotent: restore an existing run or start cleanly.
+    if resume and last_path.is_file():
         checkpoint = load_checkpoint(last_path, map_location=device)
         for key, expected in critical.items():
             if checkpoint.get(key) != expected:
