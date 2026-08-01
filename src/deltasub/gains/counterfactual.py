@@ -234,14 +234,18 @@ class CounterfactualGainEvaluator:
         base = base_loss.total.detach().float()
         counter = cf_loss.total.detach().float()
         valid = bool(base_loss.valid[anchor] and cf_loss.valid[anchor])
-        # Invalid labels remain explicit; their finite arithmetic value is diagnostic only.
-        gain = float(base[anchor] - counter[anchor])
+        # Derive gain from the exact scalar values written to the artifact.
+        # Computing the subtraction in float32 and then converting it can differ
+        # from subtracting the two separately converted Python floats.
+        base_anchor = float(base[anchor])
+        counter_anchor = float(counter[anchor])
+        gain = base_anchor - counter_anchor
         delta = counter - base
         non_anchor = torch.cat((delta[:anchor], delta[anchor + 1:]))
         base_scalar = float(base[base_loss.valid].mean())
         cf_scalar = float(counter[cf_loss.valid].mean())
         return GainEvaluation(
-            anchor, parent, gain, float(base[anchor]), float(counter[anchor]),
+            anchor, parent, gain, base_anchor, counter_anchor,
             base_scalar, cf_scalar, cf_scalar - base_scalar,
             float(non_anchor.sum()), float(non_anchor.abs().max()) if non_anchor.numel() else 0.0,
             valid, int(base_assembled.effective_token_count[anchor * views]),
