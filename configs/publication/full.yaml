@@ -1,0 +1,30 @@
+schema_version: m9.campaign.v1
+tier: full
+datasets:
+  cub: {name: cub, root: /home/ubuntu/datasets/cub, manifest: /home/ubuntu/datasets/cub/manifest.jsonl, manifest_sha256: 8501add0055d0dcea7b1d32d20e1024a72411724633113aa4a5d109ade6102f0, samples: 11788, split_validation: /home/ubuntu/datasets/cub/split_validation.json}
+  aircraft: {name: aircraft, root: /home/ubuntu/datasets/aircraft, manifest: /home/ubuntu/datasets/aircraft/manifest.jsonl, manifest_sha256: 9b8ea1398f1686f1eacd20df11448514344d4d7dc901988e540d307e03870c35, samples: 10000, split_validation: /home/ubuntu/datasets/aircraft/split_validation.json}
+methods: [baseline, deltasub]
+seeds: [0, 1, 2]
+backbone: {name: dinov2_vitb14, checkpoint: /home/ubuntu/checkpoints/dinov2_vitb14_pretrain.pth, checkpoint_sha256: 0b8b82f85de91b424aded121c7e1dcc2b7bc6d0adeea651bf73a13307fad8c73, source_root: /home/ubuntu/references/dinov2-7764ea0f912e53c92e82eb78a2a1631e92725fc8}
+selex: {equivalence_report: /home/ubuntu/research/deltasub/artifacts/selex/equivalence_a100.json, equivalence_sha256: ed023c0af4fb7a2e7f6338b7b60201ba560f55d37f7c5c08cfa3949961f2e2ab, revision: 569ee7085e779999502bd73ea92240f3d32fc84d}
+gcd: {protocol: gcd_v2, revision: 831a645c3d09a68ec4633a45741025765bacf7e0, unit: fraction}
+training:
+  baseline: &training {epochs: 100, physical_batch_size: 32, gradient_accumulation: 4, evaluation_batch_size: 64, num_workers: 8, learning_rate: 0.001, weight_decay: 0.05, temperature: 1.0, supervised_weight: 0.35, classification_weight: 1.0, selex_weight: 1.0, gradient_clipping: 1.0, minimum_free_bytes: 10737418240}
+  deltasub: *training
+deltasub:
+  fixed_k: 16
+  gain_candidates_per_image: 256
+  gain_sample_limit: null
+  gain_batch_size: 8
+  gain_shard_size: 1024
+  candidate_microbatch_size: 4
+  router_epochs: 50
+  router_batch_size: 64
+  router_architecture: {input_dim: 768, hidden_dim: 256, depth: 2, normalization: layernorm, dropout: 0.0, coordinate_features: true, global_context_features: true, learned_position_embedding: false}
+ablations:
+  k0_no_details: {fixed_k: 0}
+  k8: {fixed_k: 8}
+  k32: {fixed_k: 32}
+output_root: artifacts/experiments/m9
+unavailable_datasets:
+  cars: {status: not_run, reason: dataset unavailable by user choice}

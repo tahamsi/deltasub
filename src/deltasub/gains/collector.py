@@ -18,6 +18,7 @@ from ..data.manifests import read_manifest
 from ..models.backbones.dinov2 import DINOv2Adapter
 from ..models.subtokens.positions import ParentAwareDetailPositions
 from ..training.baseline import ManifestImageDataset
+from ..router.features import RouterFeatureBatch, save_feature_cache
 from ..training.selex_equivalence import PRODUCTION, REFERENCE, recompute_fp32_equivalence
 from ..utils.hashing import sha256_file, stable_hash
 
@@ -138,7 +139,8 @@ def _collect_production(config_path, config, *, checkpoint, expected_sha256, sou
     evaluator = CounterfactualGainEvaluator(adapter, child, positions, head, encode)
     records = read_manifest(dataset_config["manifest"])
     image_dataset = ManifestImageDataset(
-        records, None, train=True, seed=int(collection["seed"])
+        records, dataset_config.get("root") or Path(dataset_config["manifest"]).parent,
+        train=True, seed=int(collection["seed"])
     )
     records = image_dataset.records
     batch_size = int(collection["batch_size"])
@@ -157,6 +159,7 @@ def _collect_production(config_path, config, *, checkpoint, expected_sha256, sou
     configuration_sha = stable_hash(config)
     git = _git_commit()
     contexts = []
+    feature_batches = []
     materialized = []
     for batch_number, indices in enumerate(batches):
         items = [image_dataset[index] for index in indices]
@@ -184,6 +187,16 @@ def _collect_production(config_path, config, *, checkpoint, expected_sha256, sou
             device=device, source_git_commit=git,
         )
         contexts.append(context)
+        with torch.inference_mode():
+            parent_features = adapter.pre_transformer_parent_embeddings(
+                images.flatten(0, 1)
+            ).reshape(len(items), 2, 256, 768).float().mean(1).cpu()
+        feature_batches.append(RouterFeatureBatch(
+            sample_ids, "two-view-stacked-v1", context.sha256, parent_features,
+            checkpoint_sha, adapter.inspection.source_revision,
+            dataset_config["manifest_sha256"], configuration_sha,
+            module_sha256(child),
+        ))
         materialized.append(indices)
     expected = {
         (contexts[b].sha256, contexts[b].sample_ids[anchor], anchor, parent)
@@ -289,6 +302,8 @@ def _collect_production(config_path, config, *, checkpoint, expected_sha256, sou
                     errors += 1
                     raise
     cache.flush()
+    feature_cache_path = Path(config["output_root"]) / "router_features.pt"
+    feature_cache_hash = save_feature_cache(feature_batches, feature_cache_path)
     validation = cache.validate(expected_keys=expected)
     state_after = stable_hash([
         module_sha256(module) for module in (adapter, child, positions, head)
@@ -305,6 +320,8 @@ def _collect_production(config_path, config, *, checkpoint, expected_sha256, sou
         "peak_gpu_memory_bytes": torch.cuda.max_memory_allocated(device),
         "forward_pass_count": forward_passes,
         "candidate_throughput_per_second": processed / max(elapsed, 1e-12),
+        "router_feature_cache": str(feature_cache_path),
+        "router_feature_cache_hash": feature_cache_hash,
         "model_state_hash_before": state_before, "model_state_hash_after": state_after,
         "model_state_equal": state_before == state_after,
     }

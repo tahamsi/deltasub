@@ -34,6 +34,9 @@ from .baselines.config import load_config as load_m8_config
 from .baselines.registry import adapter_statuses, build_registry
 from .baselines.comparison import compare_fixture
 from .baselines.training import run_fixture_training as run_m8_training
+from .diagnostic import preflight as m9_preflight, run_diagnostic as run_m9_diagnostic, summarize as summarize_m9
+from .experiment.campaign import (preflight as experiment_preflight, run as experiment_run,
+                                  status as experiment_status, aggregate as experiment_aggregate)
 
 
 def doctor() -> dict:
@@ -242,6 +245,27 @@ def build_parser() -> argparse.ArgumentParser:
     baseline.add_argument("--seed", type=int)
     baseline.add_argument("--resume", action="store_true")
     baseline.add_argument("--validate-only", "--dry-run", action="store_true", dest="validate_only")
+    diagnostic = sub.add_parser("diagnostic", help="M9 strict seed-0 real-asset diagnostic gate")
+    diagnostic_sub = diagnostic.add_subparsers(dest="diagnostic_command", required=True)
+    diagnostic_preflight = diagnostic_sub.add_parser("preflight")
+    diagnostic_preflight.add_argument("--config", required=True)
+    diagnostic_run = diagnostic_sub.add_parser("run")
+    diagnostic_run.add_argument("--config", required=True)
+    diagnostic_run.add_argument("--resume", action="store_true")
+    diagnostic_summary = diagnostic_sub.add_parser("summarize")
+    diagnostic_summary.add_argument("--output-root", default="artifacts/diagnostic/m9")
+    experiment = sub.add_parser("experiment", help="M9 production campaign runner")
+    experiment_sub = experiment.add_subparsers(dest="experiment_command", required=True)
+    for name in ("preflight", "status", "summarize", "aggregate", "tables"):
+        command = experiment_sub.add_parser(name); command.add_argument("--config", required=True)
+    experiment_run_parser = experiment_sub.add_parser("run")
+    experiment_run_parser.add_argument("--config", required=True)
+    experiment_run_parser.add_argument("--dataset", choices=["cub", "aircraft"], required=True)
+    experiment_run_parser.add_argument("--method", choices=["baseline", "deltasub"], required=True)
+    experiment_run_parser.add_argument("--seed", type=int, required=True)
+    experiment_run_parser.add_argument("--resume", action="store_true")
+    experiment_run_parser.add_argument("--confirm-full", action="store_true")
+    experiment_run_parser.add_argument("--ablation")
     paper = sub.add_parser("paper")
     paper_sub = paper.add_subparsers(dest="paper_command", required=True)
     build = paper_sub.add_parser("build-all")
@@ -466,6 +490,21 @@ def main(argv=None) -> int:
         except (FileNotFoundError, ValueError, OSError) as error:
             print(f"training error: {error}", file=sys.stderr)
             return 2
+    elif args.command == "experiment":
+        try:
+            if args.experiment_command == "preflight": result = experiment_preflight(args.config)
+            elif args.experiment_command == "run": result = experiment_run(args.config,args.dataset,args.method,args.seed,resume=args.resume,confirm_full=args.confirm_full,ablation=args.ablation)
+            elif args.experiment_command == "status": result = experiment_status(args.config)
+            else: result = experiment_aggregate(args.config)
+        except (FileNotFoundError, FileExistsError, ValueError, RuntimeError, OSError) as error:
+            print(f"experiment error: {error}", file=sys.stderr); return 2
+    elif args.command == "diagnostic":
+        try:
+            if args.diagnostic_command == "preflight": result = m9_preflight(args.config)
+            elif args.diagnostic_command == "run": result = run_m9_diagnostic(args.config, resume=args.resume)
+            else: result = summarize_m9(args.output_root)
+        except (FileNotFoundError, ValueError, RuntimeError, OSError) as error:
+            print(f"diagnostic error: {error}", file=sys.stderr); return 2
     elif args.command == "paper" and args.paper_command == "build-all":
         records = []
         for path in Path(args.runs).glob("*/metrics.json"):

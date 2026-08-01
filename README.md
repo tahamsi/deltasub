@@ -68,6 +68,34 @@ Before real research training, supply:
 This repository intentionally refuses to present a synthetic implementation as a
 reproduction of SelEx or any unavailable baseline.
 
+## M9 seed-0 diagnostic gate
+
+M9 provides strict real-asset preflight and campaign/verdict artifacts. Preflight reads
+and hashes assets and strictly loads the official checkpoint, but never starts training.
+Cars is recorded independently as `not_run` with reason `dataset unavailable by user
+choice`, so it does not prevent CUB or Aircraft preflight. The bounded diagnostic budget
+is 20 frozen-baseline epochs; DeltaSub uses at most 512 gain images with four candidates
+each, 10 router epochs, 10 adaptive-head epochs, and fixed K=16. These reductions are
+explicitly diagnostic-only.
+
+```bash
+python -m deltasub.cli diagnostic preflight --config configs/diagnostic/cub_seed0.yaml
+python -m deltasub.cli diagnostic preflight --config configs/diagnostic/aircraft_seed0.yaml
+python -m deltasub.cli diagnostic run --config configs/diagnostic/cub_seed0.yaml --resume
+python -m deltasub.cli diagnostic run --config configs/diagnostic/aircraft_seed0.yaml --resume
+python -m deltasub.cli diagnostic summarize --output-root artifacts/diagnostic/m9
+```
+
+The summary command records Cars without touching its dataset. A dataset verdict is
+positive when `DeltaSub gcd_all_v2 - baseline gcd_all_v2 >= minimum_delta` and is
+strictly above zero; negative when it is below `-minimum_delta`; otherwise it is neutral.
+Missing provenance, execution failures, and missing metrics are invalid. A positive
+campaign only writes an authorization-ready report and never starts core/full work.
+
+At this revision, the strict preflight and verdict layer is implemented, but the command
+still fails closed before training because M0--M8 lack a production M6 trainer and common
+GCD-v2 evaluator. It never routes through fixture-only M8 adapters.
+
 ## M5 gain router
 
 The M5 router runs before DINOv2's transformer blocks. A compact shared MLP scores every
@@ -133,9 +161,8 @@ python -m deltasub.cli subvit fixture --output artifacts/subvit/m7_fixture --res
 python -m deltasub.cli subvit inspect artifacts/subvit/m7_fixture/training/checkpoint_last.pt
 ```
 
-Every fixture says `SYNTHETIC DIAGNOSTIC NON-REPORTABLE`. No dataset/checkpoint is
-downloaded and no paper table is reproduced. M8 later added only adapter fixtures; M9
-remains incomplete.
+Every M7 fixture says `SYNTHETIC DIAGNOSTIC NON-REPORTABLE`. M9's separate `experiment`
+surface is the only production campaign path; no paper result has yet been produced.
 
 ## Result artifacts
 
@@ -255,8 +282,47 @@ file and its SHA256 in the resolved experiment configuration. The adapter never 
 back to random weights.
 
 M4 gain collection is exposed under `gains`; M5 router, M6 adaptive execution, and M7
-SubViT diagnostics have dedicated command groups. M8 adapters, real GCD evaluation, and
-benchmark efficiency evaluation remain unavailable.
+SubViT diagnostics have dedicated command groups. M9 adds the production baseline,
+DeltaSub staged runner, exact pinned GCD-v2 evaluation, and campaign aggregation.
+
+## M9 production experiments
+
+The GCD-v2 evaluator is an exact port of
+`project_utils/cluster_and_log_utils.py:split_cluster_acc_v2` at GCD revision
+`831a645c3d09a68ec4633a45741025765bacf7e0`. It builds one global contingency matrix,
+uses SciPy's Hungarian assignment once over all samples, and reports All, Old, and New
+accuracy under that same mapping as fractions in `[0,1]`. Empty partitions, overlapping
+class partitions, negative/non-integral/non-finite labels, inconsistent lengths, and
+protocols other than `gcd_v2` fail closed. Reference hashes and the implementation hash
+are available through `deltasub.evaluation.gcd_v2.provenance()`.
+
+The frozen baseline trains only a linear 768-to-class head over strict-loaded official
+DINOv2 ViT-B/14 CLS features. DeltaSub runs the existing M4 paired gain collector, emits
+the exact M5 parent-feature cache, trains the M5 router, then trains the M3 child
+projector, detail-mode positions, and classification head while keeping DINOv2 and the
+router frozen. It retains all 256 parents and adds three Haar details for each of K=16
+selected parents. Unlabelled ground-truth targets are replaced with `-1` at the training
+dataset boundary; detached model predictions supply pseudo-labels. Test labels enter
+only final evaluation.
+
+Commands are intentionally one run per process:
+
+```bash
+python -m deltasub.cli experiment preflight --config configs/publication/core.yaml
+python -m deltasub.cli experiment run --config configs/publication/core.yaml --dataset cub --method baseline --seed 0 --resume
+python -m deltasub.cli experiment run --config configs/publication/core.yaml --dataset cub --method deltasub --seed 0 --resume
+python -m deltasub.cli experiment status --config configs/publication/core.yaml
+python -m deltasub.cli experiment aggregate --config configs/publication/core.yaml
+```
+
+Diagnostic runs use `configs/diagnostic/{cub,aircraft}_seed0.yaml` and write beneath
+`artifacts/diagnostic/m9/<dataset>/seed_0/`. The bounded diagnostic uses 20 baseline
+epochs, four candidates over at most 512 gain samples, 10 router epochs, 10 adaptive
+epochs, and fixed K=16. Core/full configs use seeds 0/1/2 and full 256-candidate gain
+collection. Checkpoints contain optimizer, scheduler, RNG, loader-generator, epoch, and
+global-step state and reject incompatible resumes. Cars is always `not_run` with reason
+`dataset unavailable by user choice`. No diagnostic, core, or full run has been executed,
+so there are no benchmark claims.
 
 ## M3 direct Haar subtokens
 

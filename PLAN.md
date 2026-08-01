@@ -30,8 +30,9 @@ deterministic diagnostic.
   Only synthetic non-reportable fixtures ran; a real verdict remains unavailable.
 - [x] M8: common-protocol adapters and synthetic comparison fixtures for ViT, SubViT,
   DeltaSub, MSViT, and DART. All remain evidence-derived `fixture_only`.
-- [ ] M9: three-seed core experiments on CUB, Aircraft, Cars; essential ablations and
-  efficiency profiling.
+- [ ] M9: strict seed-0 real-asset preflight and campaign/verdict layer implemented;
+  production execution remains blocked on the missing M6 trainer and GCD-v2 evaluator.
+  No diagnostic, core, or full experiment has run.
 - [ ] M10: defensible lower-priority ports, secondary datasets, transfer and robustness.
 - [ ] M11: artifact audit, generated tables/figures, compute report and reproduction report.
 
@@ -195,3 +196,14 @@ small M=4 gain collection; approximately 100-image full-patch audit; decisive di
 then, only on a positive verdict, CUB gains/router/budget stages followed sequentially by
 three-seed CUB, Aircraft, Cars, core baselines, ablations, efficiency, and lower-priority
 work.
+
+## M9 production implementation status (2026-08-01)
+
+The runnable code path is implemented but no real training has been launched. It uses
+manifest-only CUB/Aircraft loading, strict pinned DINOv2, M4 paired gains plus emitted M5
+feature caches, M5 router training, native M3 Haar details, fixed-K adaptive training,
+and the pinned GCD-v2 Hungarian evaluator. Every campaign unit is a separate resumable
+dataset/method/seed command. Core and full configurations are under
+`configs/publication/`; Cars remains explicitly unavailable by user choice. The full
+tier is still gated by `DIAGNOSTIC_VERDICT.md` and explicit CLI confirmation; its mere
+configuration does not authorize execution. No result or verdict is claimed.
