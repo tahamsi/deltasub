@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from .novelty_preserving import (
@@ -276,19 +277,16 @@ class NoveltyPreservingDeltaSub(nn.Module):
             targets,
         )
 
-    def features(
+    def _complete_features(
         self,
         images: torch.Tensor,
+        global_features: torch.Tensor,
+        parents: torch.Tensor,
+        parent_positions: torch.Tensor,
+        prefix: torch.Tensor,
         *,
-        return_auxiliary: bool = False,
-    ) -> torch.Tensor | NoveltyDeltaSubOutput:
-        (
-            global_features,
-            parents,
-            parent_positions,
-            prefix,
-        ) = self._global_path(images)
-
+        view_disagreement: torch.Tensor | None = None,
+    ) -> NoveltyDeltaSubOutput:
         active_prototypes = self.prototype_bank.active()
 
         if active_prototypes.shape[0]:
@@ -307,6 +305,7 @@ class NoveltyPreservingDeltaSub(nn.Module):
         scores = detail_saliency_scores(
             parents,
             global_features,
+            view_disagreement=view_disagreement,
         )
         selection = select_detail_parents(
             scores,
@@ -333,9 +332,6 @@ class NoveltyPreservingDeltaSub(nn.Module):
             gate,
         )
 
-        if not return_auxiliary:
-            return fused
-
         return NoveltyDeltaSubOutput(
             fused_features=fused,
             global_features=global_features,
@@ -343,6 +339,86 @@ class NoveltyPreservingDeltaSub(nn.Module):
             novelty=novelty,
             gate=gate,
             selection=selection,
+        )
+
+    def features(
+        self,
+        images: torch.Tensor,
+        *,
+        return_auxiliary: bool = False,
+    ) -> torch.Tensor | NoveltyDeltaSubOutput:
+        (
+            global_features,
+            parents,
+            parent_positions,
+            prefix,
+        ) = self._global_path(images)
+
+        output = self._complete_features(
+            images,
+            global_features,
+            parents,
+            parent_positions,
+            prefix,
+        )
+
+        return output if return_auxiliary else output.fused_features
+
+    def paired_features(
+        self,
+        views: torch.Tensor,
+    ) -> NoveltyDeltaSubOutput:
+        """Encode two views with shared cross-view patch disagreement."""
+
+        if views.ndim != 5 or tuple(views.shape[1:]) != (
+            2,
+            3,
+            224,
+            224,
+        ):
+            raise ValueError(
+                "views must have shape [B, 2, 3, 224, 224]"
+            )
+
+        batch_size = views.shape[0]
+        flat = views.reshape(batch_size * 2, 3, 224, 224)
+
+        (
+            global_features,
+            parents,
+            parent_positions,
+            prefix,
+        ) = self._global_path(flat)
+
+        paired_parents = parents.reshape(
+            batch_size,
+            2,
+            256,
+            self.config.feature_dim,
+        )
+
+        disagreement = (
+            1.0
+            - F.cosine_similarity(
+                paired_parents[:, 0].float(),
+                paired_parents[:, 1].float(),
+                dim=-1,
+            )
+        ).clamp_min(0)
+
+        repeated_disagreement = (
+            disagreement[:, None, :]
+            .expand(-1, 2, -1)
+            .reshape(batch_size * 2, 256)
+        )
+
+        return self._complete_features(
+            flat,
+            global_features,
+            parents,
+            parent_positions,
+            prefix,
+            view_disagreement=repeated_disagreement,
         )
 
     def forward(self, images: torch.Tensor) -> torch.Tensor:

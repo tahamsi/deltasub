@@ -195,3 +195,15 @@ def test_prototype_update_changes_cold_start_state() -> None:
 
     assert model.prototype_bank.active_class_count == 2
     assert not torch.equal(before.novelty, after.novelty)
+
+
+def test_paired_features_use_two_view_contract() -> None:
+    torch.manual_seed(5)
+    model = make_model(maximum_k=4)
+    views = torch.randn(2, 2, 3, 224, 224)
+
+    output = model.paired_features(views)
+
+    assert output.fused_features.shape == (4, 8)
+    assert output.selection.selected_mask.shape == (4, 256)
+    assert output.selection.adaptive_k.tolist() == [2, 2, 2, 2]
