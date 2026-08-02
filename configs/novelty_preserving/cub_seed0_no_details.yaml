@@ -1,0 +1,45 @@
+schema_version: novelty-preserving-deltasub.diagnostic.v1
+dataset:
+  name: cub
+  root: /home/ubuntu/datasets/cub
+  manifest: /home/ubuntu/datasets/cub/manifest.jsonl
+  manifest_sha256: 8501add0055d0dcea7b1d32d20e1024a72411724633113aa4a5d109ade6102f0
+  samples: 11788
+  split_validation: /home/ubuntu/datasets/cub/split_validation.json
+backbone:
+  name: dinov2_vitb14
+  checkpoint: /home/ubuntu/checkpoints/dinov2_vitb14_pretrain.pth
+  checkpoint_sha256: 0b8b82f85de91b424aded121c7e1dcc2b7bc6d0adeea651bf73a13307fad8c73
+  source_root: /home/ubuntu/references/dinov2-7764ea0f912e53c92e82eb78a2a1631e92725fc8
+selex:
+  equivalence_report: /home/ubuntu/research/deltasub/artifacts/selex/equivalence_a100.json
+  equivalence_sha256: ed023c0af4fb7a2e7f6338b7b60201ba560f55d37f7c5c08cfa3949961f2e2ab
+  revision: 569ee7085e779999502bd73ea92240f3d32fc84d
+seed: 0
+training:
+  epochs: 20
+  physical_batch_size: 16
+  gradient_accumulation: 8
+  evaluation_batch_size: 32
+  num_workers: 4
+  learning_rate: 0.001
+  weight_decay: 0.05
+  temperature: 1.0
+  supervised_weight: 0.35
+  classification_weight: 1.0
+  selex_weight: 1.0
+  gradient_clipping: 1.0
+method:
+  maximum_detail_parents: 0
+  gate_hidden_dim: 128
+  novelty_temperature: 0.1
+  known_similarity_threshold: 0.5
+  preservation_weight: 0.25
+  view_consistency_weight: 0.25
+  novel_dispersion_weight: 0.1
+  sparsity_weight: 0.01
+  dispersion_margin: 0.5
+  prototype_momentum: 0.9
+  cold_start_novelty: 0.5
+baseline_result: artifacts/diagnostic/m9/cub/seed_0/baseline/result.json
+output_directory: artifacts/novelty_preserving/diagnostic/cub/seed_0_no_details
