@@ -202,6 +202,11 @@ def test_forward_returns_dual_paths_and_bounded_fusion() -> None:
     assert output.selection.selected_mask.shape == (3, 256)
     assert torch.all(output.fusion_weight >= 0)
     assert torch.all(output.fusion_weight <= 1)
+    assert torch.all(output.fusion_weight == 1)
+    assert not torch.allclose(
+        output.detail_features,
+        output.global_features,
+    )
 
 
 def test_zero_detail_budget_exactly_recovers_global_branch() -> None:
@@ -268,7 +273,11 @@ def test_gradients_flow_through_tail_and_detail_path() -> None:
     )
     assert any(
         parameter.grad is not None
-        for parameter in model.utility.parameters()
+        for parameter in model.parent_query.parameters()
+    )
+    assert any(
+        parameter.grad is not None
+        for parameter in model.detail_key.parameters()
     )
     assert model.head.weight.grad is not None
 

@@ -323,14 +323,29 @@ class DeltaSubV2(nn.Module):
         self.config = config
         self.class_count = int(class_count)
 
-        # Freeze the early trunk and train exactly the final N blocks.
+        # Match the SelEx head initialization before constructing any
+        # DeltaSub-specific modules.
         self.backbone.set_trainable_blocks(config.trainable_blocks)
+        self.head = nn.Linear(config.feature_dim, class_count)
 
         self.child = backbone.build_child_projector(trainable=True)
         self.haar = HaarDetails()
         self.detail_adapter = DetailAdapter(
             config.feature_dim,
             config.detail_adapter_hidden_dim,
+        )
+
+        self.parent_norm = nn.LayerNorm(config.feature_dim)
+        self.detail_norm = nn.LayerNorm(config.feature_dim)
+        self.parent_query = nn.Linear(
+            config.feature_dim,
+            config.feature_dim,
+            bias=False,
+        )
+        self.detail_key = nn.Linear(
+            config.feature_dim,
+            config.feature_dim,
+            bias=False,
         )
 
         self.mode_embeddings = nn.Parameter(
@@ -343,12 +358,6 @@ class DeltaSubV2(nn.Module):
         )
         self.detail_scale_logit = nn.Parameter(
             torch.tensor(initial_scale_logit)
-        )
-
-        self.head = nn.Linear(config.feature_dim, class_count)
-        self.utility = UtilityCalibrator(
-            config.utility_hidden_dim,
-            initial_weight=config.initial_fusion_weight,
         )
 
         self._apply_training_policy()
@@ -512,79 +521,122 @@ class DeltaSubV2(nn.Module):
         selection: AdaptiveDetailSelection,
         global_features: torch.Tensor,
     ) -> torch.Tensor:
+        """Inject selected Haar evidence into its parent tokens."""
+
         if self.config.maximum_k == 0:
             return global_features
 
         prefix_count = int(self.backbone.prefix_token_count)
+        parent_start = prefix_count
+        parent_end = prefix_count + 256
+
         parent_tokens = trunk_tokens[
             :,
-            prefix_count : prefix_count + 256,
+            parent_start:parent_end,
         ]
 
-        result = global_features.clone()
-        mode_embeddings = self.mode_embeddings.to(
+        detail_modes = (
             adapted_details
+            + self.mode_embeddings[
+                None,
+                None,
+                :,
+                :,
+            ].to(adapted_details)
         )
-        detail_scale = torch.sigmoid(
-            self.detail_scale_logit
+
+        queries = F.normalize(
+            self.parent_query(
+                self.parent_norm(parent_tokens)
+            ).float(),
+            dim=-1,
+        )
+        keys = F.normalize(
+            self.detail_key(
+                self.detail_norm(detail_modes)
+            ).float(),
+            dim=-1,
+        )
+
+        mode_attention = F.softmax(
+            (
+                queries.unsqueeze(2)
+                * keys
+            ).sum(dim=-1)
+            / 0.07,
+            dim=2,
         ).to(adapted_details)
 
-        for k_value in torch.unique(
-            selection.adaptive_k,
-            sorted=True,
-        ).tolist():
-            k = int(k_value)
+        residual = (
+            mode_attention.unsqueeze(-1)
+            * adapted_details
+        ).sum(dim=2)
 
-            if k == 0:
-                continue
+        score_scale = selection.scores.float()
+        score_scale = score_scale / (
+            score_scale.amax(dim=1, keepdim=True)
+            .clamp_min(1e-8)
+        )
 
-            rows = torch.nonzero(
-                selection.adaptive_k == k,
-                as_tuple=False,
-            ).squeeze(1)
+        strength = (
+            selection.selected_mask.to(score_scale)
+            * score_scale
+        ).to(residual)
 
-            selected = selection.selected_mask[rows]
-            group_size = int(rows.numel())
+        residual = (
+            torch.sigmoid(self.detail_scale_logit)
+            .to(residual)
+            * strength.unsqueeze(-1)
+            * residual
+        )
 
-            selected_details = adapted_details[rows][
-                selected
-            ].reshape(
-                group_size,
-                k,
-                3,
-                self.config.feature_dim,
-            )
+        selected_count = (
+            selection.selected_mask.sum(dim=1)
+            .clamp_min(1)
+            .to(residual)
+        )
 
-            selected_parents = parent_tokens[rows][
-                selected
-            ].reshape(
-                group_size,
-                k,
-                self.config.feature_dim,
-            )
+        pooled_residual = (
+            residual.sum(dim=1)
+            / selected_count.unsqueeze(1)
+        )
 
-            detail_tokens = (
-                selected_parents.unsqueeze(2)
-                + mode_embeddings[None, None, :, :]
-                + detail_scale * selected_details
-            ).reshape(
-                group_size,
-                3 * k,
-                self.config.feature_dim,
-            )
+        prefix_tokens = trunk_tokens[
+            :,
+            :prefix_count,
+        ].clone()
 
-            branch_tokens = torch.cat(
-                (
-                    trunk_tokens[rows],
-                    detail_tokens,
-                ),
-                dim=1,
-            )
+        cls_token = (
+            prefix_tokens[:, 0]
+            + pooled_residual.to(prefix_tokens)
+        )
 
-            encoded = self._tail_encode(branch_tokens)
-            result[rows] = encoded.to(result)
+        prefix_tokens = torch.cat(
+            (
+                cls_token.unsqueeze(1),
+                prefix_tokens[:, 1:],
+            ),
+            dim=1,
+        )
 
-        return result
+        injected_parents = (
+            parent_tokens
+            + residual.to(parent_tokens)
+        )
+
+        suffix = trunk_tokens[:, parent_end:]
+
+        branch_tokens = torch.cat(
+            (
+                prefix_tokens,
+                injected_parents,
+                suffix,
+            ),
+            dim=1,
+        )
+
+        return self._tail_encode(branch_tokens)
+
 
     def branches(
         self,
@@ -605,43 +657,33 @@ class DeltaSubV2(nn.Module):
             adapted_details,
         )
 
-        detail_features = self._detail_branch(
-            trunk_tokens,
-            adapted_details,
-            selection,
-            global_features,
+        # Preserve the global-path RNG trajectory so matched SelEx and
+        # DeltaSub receive identical tail-block dropout sequences.
+        devices = (
+            [torch.cuda.current_device()]
+            if images.is_cuda
+            else []
         )
+
+        with torch.random.fork_rng(devices=devices):
+            detail_features = self._detail_branch(
+                trunk_tokens,
+                adapted_details,
+                selection,
+                global_features,
+            )
 
         global_logits = self.head(global_features)
         detail_logits = self.head(detail_features)
 
-        if self.config.maximum_k:
-            k_fraction = (
-                selection.adaptive_k.float()
-                / float(self.config.maximum_k)
-            )
-        else:
-            k_fraction = torch.zeros_like(
-                selection.retained_fraction
-            )
-
-        fusion_weight = self.utility(
-            global_logits,
-            detail_logits,
-            selection.retained_fraction,
-            k_fraction,
-        )
-
-        fused_features = (
-            global_features
-            + fusion_weight.unsqueeze(1)
-            * (detail_features - global_features)
-        )
-
-        fused_logits = (
-            global_logits
-            + fusion_weight.unsqueeze(1)
-            * (detail_logits - global_logits)
+        # The learned fusion collapsed to a constant and degraded novel
+        # accuracy. Parent-injected detail is now the primary DeltaSub path.
+        fused_features = detail_features
+        fused_logits = detail_logits
+        fusion_weight = torch.ones(
+            images.shape[0],
+            device=detail_features.device,
+            dtype=detail_features.dtype,
         )
 
         return DeltaSubV2Output(

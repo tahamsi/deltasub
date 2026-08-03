@@ -1277,6 +1277,11 @@ def run(
     )
 
     model = construct_model(config, device=device)
+
+    # Model-specific module construction must not change training RNG.
+    # This makes the global DeltaSub path exactly comparable to SelEx.
+    seed_everything(seed)
+
     optimizer, parameters, group_counts = _optimizer(
         model,
         training,
@@ -1658,7 +1663,8 @@ def smoke(config_path: str | Path) -> None:
         required = (
             "child",
             "detail_adapter",
-            "utility",
+            "parent_query",
+            "detail_key",
             "head",
         )
 
