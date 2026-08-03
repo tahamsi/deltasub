@@ -96,6 +96,26 @@ def adaptive_energy_select(
         raise ValueError("retained_fraction must be in (0, 1]")
 
     work = scores.float()
+
+    if maximum_k == 0:
+        adaptive_k = torch.zeros(
+            scores.shape[0],
+            dtype=torch.long,
+            device=scores.device,
+        )
+        selection = deterministic_select(work, adaptive_k)
+
+        return AdaptiveDetailSelection(
+            scores=scores,
+            selected_mask=selection.selected_mask,
+            selected_indices=selection.selected_indices,
+            adaptive_k=adaptive_k,
+            retained_fraction=torch.zeros_like(
+                adaptive_k,
+                dtype=work.dtype,
+            ),
+        )
+
     ranked = torch.argsort(
         work,
         dim=1,
@@ -103,8 +123,12 @@ def adaptive_energy_select(
         stable=True,
     )
     ranked_scores = work.gather(1, ranked)
-    cumulative = ranked_scores.cumsum(dim=1)
-    totals = ranked_scores.sum(dim=1)
+
+    # Adapt K within the permitted token budget. Measuring against
+    # all 256 patches forces every diffuse sample to maximum_k.
+    selectable_scores = ranked_scores[:, :maximum_k]
+    cumulative = selectable_scores.cumsum(dim=1)
+    totals = selectable_scores.sum(dim=1)
 
     threshold = totals * float(retained_fraction)
     reached = cumulative >= threshold.unsqueeze(1)

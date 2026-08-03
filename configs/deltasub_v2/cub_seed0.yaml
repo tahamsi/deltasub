@@ -1,0 +1,50 @@
+schema_version: deltasub-v2.experiment.v1
+dataset:
+  name: cub
+  root: /home/ubuntu/datasets/cub
+  manifest: /home/ubuntu/datasets/cub/manifest.jsonl
+  split_validation: /home/ubuntu/datasets/cub/split_validation.json
+backbone:
+  name: dinov2_vitb14
+  checkpoint: /home/ubuntu/checkpoints/dinov2_vitb14_pretrain.pth
+  checkpoint_sha256: 0b8b82f85de91b424aded121c7e1dcc2b7bc6d0adeea651bf73a13307fad8c73
+  source_root: /home/ubuntu/references/dinov2-7764ea0f912e53c92e82eb78a2a1631e92725fc8
+selex:
+  equivalence_report: /home/ubuntu/research/deltasub/artifacts/selex/equivalence_a100.json
+  revision: 569ee7085e779999502bd73ea92240f3d32fc84d
+seed: 0
+training:
+  epochs: 30
+  physical_batch_size: 16
+  gradient_accumulation: 8
+  evaluation_batch_size: 32
+  num_workers: 4
+  backbone_learning_rate: 1.0e-05
+  head_learning_rate: 0.001
+  detail_learning_rate: 0.001
+  weight_decay: 0.05
+  temperature: 1.0
+  supervised_weight: 0.35
+  classification_weight: 1.0
+  selex_weight: 1.0
+  global_branch_weight: 0.5
+  detail_branch_weight: 0.5
+  fused_branch_weight: 1.0
+  utility_weight: 0.25
+  preservation_weight: 0.25
+  budget_weight: 0.01
+  utility_temperature: 0.25
+  preservation_tolerance: 0.02
+  gradient_clipping: 1.0
+method:
+  variant: deltasub_v2
+  insertion_block: 10
+  trainable_blocks: 2
+  minimum_k: 1
+  maximum_k: 16
+  retained_energy_fraction: 0.8
+  detail_adapter_hidden_dim: 768
+  utility_hidden_dim: 128
+  initial_detail_scale: 0.1
+  initial_fusion_weight: 0.25
+output_directory: artifacts/deltasub_v2/cub/seed_0/deltasub_v2

@@ -289,6 +289,12 @@ def test_selection_is_deterministic_under_ties() -> None:
         retained_fraction=0.75,
     )
 
-    assert first.adaptive_k.tolist() == [4, 4, 4, 4]
+    assert first.adaptive_k.tolist() == [3, 3, 3, 3]
     assert first.selected_indices == second.selected_indices
-    assert first.selected_indices[0] == (0, 1, 2, 3)
+    assert first.selected_indices[0] == (0, 1, 2)
+    assert torch.allclose(
+        first.retained_fraction,
+        torch.full((4,), 0.75),
+        atol=1e-6,
+        rtol=0,
+    )
