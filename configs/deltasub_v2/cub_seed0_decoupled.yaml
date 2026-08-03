@@ -47,4 +47,4 @@ method:
   utility_hidden_dim: 128
   initial_detail_scale: 0.1
   initial_fusion_weight: 0.15
-output_directory: artifacts/deltasub_v2/smoke/cub/seed_0
+output_directory: artifacts/deltasub_v2/cub/seed_0/deltasub_v2_decoupled

@@ -319,6 +319,39 @@ def branch_view_utility(
     return confidence - entropy - divergence
 
 
+def branch_neighborhood_margin(
+    features: torch.Tensor,
+) -> torch.Tensor:
+    """Cross-view positive similarity minus hardest batch negative."""
+
+    if features.ndim != 3 or features.shape[1] != 2:
+        raise ValueError(
+            "features must have shape [B, 2, D]"
+        )
+
+    first = F.normalize(features[:, 0].float(), dim=-1)
+    second = F.normalize(features[:, 1].float(), dim=-1)
+
+    similarity = first @ second.transpose(0, 1)
+    positive = similarity.diagonal()
+
+    if features.shape[0] == 1:
+        return positive
+
+    mask = torch.eye(
+        features.shape[0],
+        dtype=torch.bool,
+        device=features.device,
+    )
+
+    hardest_negative = similarity.masked_fill(
+        mask,
+        float("-inf"),
+    ).amax(dim=1)
+
+    return positive - hardest_negative
+
+
 def utility_target(
     *,
     global_logits: torch.Tensor,
@@ -326,8 +359,10 @@ def utility_target(
     targets: torch.Tensor,
     labelled: torch.Tensor,
     temperature: float,
+    global_features: torch.Tensor | None = None,
+    detail_features: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Prefer lower labelled loss or stronger unlabelled consistency."""
+    """Estimate whether Haar refinement improves each sample."""
 
     if temperature <= 0:
         raise ValueError("utility temperature must be positive")
@@ -336,14 +371,31 @@ def utility_target(
     if targets.shape != labelled.shape:
         raise ValueError("targets and labelled must have shape [B]")
 
-    global_utility = branch_view_utility(global_logits)
-    detail_utility = branch_view_utility(detail_logits)
+    if (
+        global_features is not None
+        and detail_features is not None
+    ):
+        if global_features.shape != detail_features.shape:
+            raise ValueError(
+                "branch features must have identical shapes"
+            )
 
+        global_utility = branch_neighborhood_margin(
+            global_features
+        )
+        detail_utility = branch_neighborhood_margin(
+            detail_features
+        )
+    else:
+        global_utility = branch_view_utility(global_logits)
+        detail_utility = branch_view_utility(detail_logits)
+
+    # Autocast may produce BF16 neighborhood utilities. Keep the
+    # calibration target in FP32 so labelled CE targets can be inserted.
     target = torch.sigmoid(
         (detail_utility - global_utility) / temperature
-    )
+    ).float()
 
-    # Never pass unlabelled sentinel targets such as -1 into CE.
     if bool(labelled.any()):
         labelled_targets = targets[labelled]
 
@@ -542,7 +594,13 @@ def _training_batch(
     batch: dict[str, Any],
     config: dict[str, Any],
     device: torch.device,
-) -> tuple[torch.Tensor, dict[str, float]]:
+) -> tuple[
+    torch.Tensor,
+    torch.Tensor,
+    dict[str, float],
+]:
+    """Return independently routed global and DeltaSub losses."""
+
     training = config["training"]
     variant = config["method"]["variant"]
 
@@ -556,104 +614,139 @@ def _training_batch(
         variant=variant,
     )
 
-    names = (
-        ("global", float(training["global_branch_weight"])),
-        ("detail", float(training["detail_branch_weight"])),
-        ("fused", float(training["fused_branch_weight"])),
+    global_classification, global_selex = _branch_losses(
+        features=branches["global_features"],
+        logits=branches["global_logits"],
+        targets=targets,
+        labelled=labelled,
+        training=training,
     )
 
-    if variant == "selex":
-        names = (("global", 1.0),)
-
-    classification = branches["fused_logits"].float().sum() * 0.0
-    contrastive = classification
-    weight_sum = 0.0
-    branch_stats: dict[str, float] = {}
-
-    for name, weight in names:
-        if weight <= 0:
-            continue
-
-        supervised, selex = _branch_losses(
-            features=branches[f"{name}_features"],
-            logits=branches[f"{name}_logits"],
-            targets=targets,
-            labelled=labelled,
-            training=training,
-        )
-
-        classification = classification + weight * supervised
-        contrastive = contrastive + weight * selex
-        weight_sum += weight
-        branch_stats[f"{name}_classification"] = float(
-            supervised.detach()
-        )
-        branch_stats[f"{name}_selex"] = float(
-            selex.detach()
-        )
-
-    if weight_sum <= 0:
-        raise ValueError("branch weights must contain a positive value")
-
-    classification = classification / weight_sum
-    contrastive = contrastive / weight_sum
-
-    if variant == "deltasub_v2":
-        target = utility_target(
-            global_logits=branches["global_logits"],
-            detail_logits=branches["detail_logits"],
-            targets=targets,
-            labelled=labelled,
-            temperature=float(
-                training["utility_temperature"]
-            ),
-        )
-
-        predicted = branches["fusion_weight"].mean(dim=1)
-
-        # Probability-form BCE is unsafe under CUDA autocast.
-        # Compute the small calibration objective explicitly in FP32.
-        with torch.autocast("cuda", enabled=False):
-            utility = F.binary_cross_entropy(
-                predicted.float().clamp(1e-6, 1 - 1e-6),
-                target.float(),
-            ) + 0.25 * F.mse_loss(
-                branches["fusion_weight"][:, 0].float(),
-                branches["fusion_weight"][:, 1].float(),
-            )
-
-        preservation = preservation_penalty(
-            fused_logits=branches["fused_logits"],
-            global_logits=branches["global_logits"],
-            targets=targets,
-            labelled=labelled,
-            tolerance=float(
-                training["preservation_tolerance"]
-            ),
-        )
-
-        maximum_k = int(config["method"]["maximum_k"])
-
-        if maximum_k:
-            budget = (
-                branches["adaptive_k"].float()
-                / float(maximum_k)
-            ).mean()
-        else:
-            budget = classification * 0.0
-    else:
-        target = classification.new_zeros(
-            targets.shape[0]
-        )
-        utility = classification * 0.0
-        preservation = classification * 0.0
-        budget = classification * 0.0
-
-    total = (
+    global_loss = float(
+        training["global_branch_weight"]
+    ) * (
         float(training["classification_weight"])
-        * classification
+        * global_classification
         + float(training["selex_weight"])
-        * contrastive
+        * global_selex
+    )
+
+    branch_stats = {
+        "global_classification": float(
+            global_classification.detach()
+        ),
+        "global_selex": float(global_selex.detach()),
+    }
+
+    if variant == "selex":
+        delta_loss = global_loss * 0.0
+
+        stats = {
+            "total": float(global_loss.detach()),
+            "global_loss": float(global_loss.detach()),
+            "delta_loss": 0.0,
+            "classification": float(
+                global_classification.detach()
+            ),
+            "selex": float(global_selex.detach()),
+            "utility": 0.0,
+            "preservation": 0.0,
+            "budget": 0.0,
+            "mean_fusion": 0.0,
+            "mean_utility_target": 0.0,
+            "mean_k": 0.0,
+            "mean_retained_fraction": 0.0,
+            **branch_stats,
+        }
+
+        return global_loss, delta_loss, stats
+
+    detail_classification, detail_selex = _branch_losses(
+        features=branches["detail_features"],
+        logits=branches["detail_logits"],
+        targets=targets,
+        labelled=labelled,
+        training=training,
+    )
+    fused_classification, fused_selex = _branch_losses(
+        features=branches["fused_features"],
+        logits=branches["fused_logits"],
+        targets=targets,
+        labelled=labelled,
+        training=training,
+    )
+
+    detail_weight = float(
+        training["detail_branch_weight"]
+    )
+    fused_weight = float(
+        training["fused_branch_weight"]
+    )
+    delta_weight = detail_weight + fused_weight
+
+    if delta_weight <= 0:
+        raise ValueError(
+            "detail and fused weights cannot both be zero"
+        )
+
+    delta_classification = (
+        detail_weight * detail_classification
+        + fused_weight * fused_classification
+    ) / delta_weight
+
+    delta_selex = (
+        detail_weight * detail_selex
+        + fused_weight * fused_selex
+    ) / delta_weight
+
+    target = utility_target(
+        global_logits=branches["global_logits"],
+        detail_logits=branches["detail_logits"],
+        global_features=branches["global_features"],
+        detail_features=branches["detail_features"],
+        targets=targets,
+        labelled=labelled,
+        temperature=float(
+            training["utility_temperature"]
+        ),
+    )
+
+    predicted = branches["fusion_weight"].mean(dim=1)
+
+    with torch.autocast("cuda", enabled=False):
+        utility = F.binary_cross_entropy(
+            predicted.float().clamp(1e-6, 1 - 1e-6),
+            target.float(),
+        ) + 0.25 * F.mse_loss(
+            branches["fusion_weight"][:, 0].float(),
+            branches["fusion_weight"][:, 1].float(),
+        )
+
+    preservation = preservation_penalty(
+        fused_logits=branches["fused_logits"],
+        global_logits=branches["global_logits"],
+        targets=targets,
+        labelled=labelled,
+        tolerance=float(
+            training["preservation_tolerance"]
+        ),
+    )
+
+    maximum_k = int(config["method"]["maximum_k"])
+
+    if maximum_k:
+        budget = (
+            branches["adaptive_k"].float()
+            / float(maximum_k)
+        ).mean()
+    else:
+        budget = global_loss * 0.0
+
+    delta_loss = (
+        float(training["classification_weight"])
+        * delta_classification
+        + float(training["selex_weight"])
+        * delta_selex
         + float(training["utility_weight"])
         * utility
         + float(training["preservation_weight"])
@@ -662,21 +755,33 @@ def _training_batch(
         * budget
     )
 
+    total = global_loss + delta_loss
+
     stats = {
         "total": float(total.detach()),
-        "classification": float(classification.detach()),
-        "selex": float(contrastive.detach()),
+        "global_loss": float(global_loss.detach()),
+        "delta_loss": float(delta_loss.detach()),
+        "classification": float(
+            delta_classification.detach()
+        ),
+        "selex": float(delta_selex.detach()),
         "utility": float(utility.detach()),
         "preservation": float(preservation.detach()),
         "budget": float(budget.detach()),
         "mean_fusion": float(
-            branches["fusion_weight"].detach().float().mean()
+            branches["fusion_weight"]
+            .detach()
+            .float()
+            .mean()
         ),
         "mean_utility_target": float(
             target.detach().float().mean()
         ),
         "mean_k": float(
-            branches["adaptive_k"].detach().float().mean()
+            branches["adaptive_k"]
+            .detach()
+            .float()
+            .mean()
         ),
         "mean_retained_fraction": float(
             branches["retained_fraction"]
@@ -684,11 +789,69 @@ def _training_batch(
             .float()
             .mean()
         ),
+        "detail_classification": float(
+            detail_classification.detach()
+        ),
+        "detail_selex": float(detail_selex.detach()),
+        "fused_classification": float(
+            fused_classification.detach()
+        ),
+        "fused_selex": float(fused_selex.detach()),
         **branch_stats,
     }
 
-    return total, stats
+    return global_loss, delta_loss, stats
 
+
+def _backward_decoupled(
+    *,
+    model: nn.Module,
+    global_loss: torch.Tensor,
+    delta_loss: torch.Tensor,
+    accumulation: int,
+    variant: str,
+) -> None:
+    """Prevent detail objectives from corrupting backbone/head gradients."""
+
+    if accumulation <= 0:
+        raise ValueError("accumulation must be positive")
+
+    global_scaled = global_loss / accumulation
+
+    if variant == "selex":
+        global_scaled.backward()
+        return
+
+    global_scaled.backward(retain_graph=True)
+
+    protected = [
+        parameter
+        for name, parameter in model.named_parameters()
+        if parameter.requires_grad
+        and (
+            name.startswith("backbone.")
+            or name.startswith("head.")
+        )
+    ]
+
+    preserved_gradients = {
+        parameter: (
+            None
+            if parameter.grad is None
+            else parameter.grad.detach().clone()
+        )
+        for parameter in protected
+    }
+
+    for parameter in protected:
+        parameter.grad = None
+
+    (delta_loss / accumulation).backward()
+
+    # Discard backbone/head gradients produced by Delta losses.
+    # Their gradients come exclusively from matched SelEx.
+    for parameter, gradient in preserved_gradients.items():
+        parameter.grad = gradient
 
 def _summary(
     values: list[float],
@@ -1237,20 +1400,28 @@ def run(
                 "cuda",
                 dtype=torch.bfloat16,
             ):
-                raw_loss, stats = _training_batch(
+                global_loss, delta_loss, stats = _training_batch(
                     model=model,
                     batch=batch,
                     config=config,
                     device=device,
                 )
-                loss = raw_loss / accumulation
 
-            if not torch.isfinite(loss):
+            if (
+                not torch.isfinite(global_loss)
+                or not torch.isfinite(delta_loss)
+            ):
                 raise FloatingPointError(
                     "non-finite training loss"
                 )
 
-            loss.backward()
+            _backward_decoupled(
+                model=model,
+                global_loss=global_loss,
+                delta_loss=delta_loss,
+                accumulation=accumulation,
+                variant=config["method"]["variant"],
+            )
 
             for key, value in stats.items():
                 sums[key] = sums.get(key, 0.0) + value
@@ -1438,14 +1609,22 @@ def smoke(config_path: str | Path) -> None:
         "cuda",
         dtype=torch.bfloat16,
     ):
-        loss, stats = _training_batch(
+        global_loss, delta_loss, stats = _training_batch(
             model=model,
             batch=batch,
             config=config,
             device=device,
         )
 
-    loss.backward()
+    _backward_decoupled(
+        model=model,
+        global_loss=global_loss,
+        delta_loss=delta_loss,
+        accumulation=1,
+        variant=config["method"]["variant"],
+    )
+
+    loss = global_loss + delta_loss
 
     gradients = {
         name: parameter.grad
