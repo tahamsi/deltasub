@@ -242,3 +242,68 @@ def test_utility_target_remains_float32_under_autocast() -> None:
     assert target.dtype == torch.float32
     assert target.shape == (2,)
     assert torch.isfinite(target).all()
+
+
+def test_joint_backward_includes_delta_gradients() -> None:
+    class ToyModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.backbone = torch.nn.Linear(
+                2,
+                2,
+                bias=False,
+            )
+            self.head = torch.nn.Linear(
+                2,
+                1,
+                bias=False,
+            )
+            self.detail_scale = torch.nn.Parameter(
+                torch.tensor(1.0)
+            )
+
+    torch.manual_seed(17)
+    model = ToyModel()
+    inputs = torch.randn(3, 2)
+
+    representation = model.backbone(inputs)
+    global_output = model.head(representation)
+    detail_output = model.head(
+        representation + model.detail_scale * inputs
+    )
+
+    global_loss = global_output.square().mean()
+    delta_loss = detail_output.square().mean()
+
+    parameters = [
+        model.backbone.weight,
+        model.head.weight,
+        model.detail_scale,
+    ]
+
+    expected = torch.autograd.grad(
+        global_loss + delta_loss,
+        parameters,
+        retain_graph=True,
+    )
+
+    _backward_decoupled(
+        model=model,
+        global_loss=global_loss,
+        delta_loss=delta_loss,
+        accumulation=1,
+        variant="deltasub_v2",
+        decouple_delta_gradients=False,
+    )
+
+    for parameter, gradient in zip(
+        parameters,
+        expected,
+        strict=True,
+    ):
+        assert torch.allclose(
+            parameter.grad,
+            gradient,
+            atol=1e-7,
+            rtol=1e-6,
+        )

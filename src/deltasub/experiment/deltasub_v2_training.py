@@ -18,7 +18,7 @@ import torch
 import torch.nn.functional as F
 import yaml
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from ..data.manifests import read_manifest
 from ..evaluation.gcd_v2 import (
@@ -84,6 +84,12 @@ TRAINING_KEYS = {
     "gradient_clipping",
 }
 
+
+OPTIONAL_TRAINING_KEYS = {
+    "supervision_mode",
+    "decouple_delta_gradients",
+}
+
 METHOD_KEYS = {
     "variant",
     "insertion_block",
@@ -112,8 +118,20 @@ def load_config(path: str | Path) -> dict[str, Any]:
         )
     if value["schema_version"] != SCHEMA:
         raise ValueError("unsupported DeltaSub v2 schema")
-    if set(value["training"]) != TRAINING_KEYS:
-        raise ValueError("training keys mismatch")
+    training_keys = set(value["training"])
+    missing_training = TRAINING_KEYS - training_keys
+    unknown_training = (
+        training_keys
+        - TRAINING_KEYS
+        - OPTIONAL_TRAINING_KEYS
+    )
+
+    if missing_training or unknown_training:
+        raise ValueError(
+            "training keys mismatch: "
+            f"missing={sorted(missing_training)}, "
+            f"unknown={sorted(unknown_training)}"
+        )
     if set(value["method"]) != METHOD_KEYS:
         raise ValueError("method keys mismatch")
 
@@ -125,6 +143,31 @@ def load_config(path: str | Path) -> dict[str, Any]:
         )
 
     training = value["training"]
+
+    supervision_mode = training.get(
+        "supervision_mode",
+        "gcd",
+    )
+
+    if supervision_mode not in {
+        "gcd",
+        "fully_supervised",
+    }:
+        raise ValueError(
+            "supervision_mode must be gcd or "
+            "fully_supervised"
+        )
+
+    decouple = training.get(
+        "decouple_delta_gradients",
+        True,
+    )
+
+    if not isinstance(decouple, bool):
+        raise TypeError(
+            "decouple_delta_gradients must be boolean"
+        )
+
     effective_batch = (
         int(training["physical_batch_size"])
         * int(training["gradient_accumulation"])
@@ -190,6 +233,40 @@ def load_config(path: str | Path) -> dict[str, Any]:
             raise FileNotFoundError(filename)
 
     return value
+
+
+
+class FullSupervisionDataset(Dataset):
+    """Expose every training target for upper-bound studies."""
+
+    def __init__(
+        self,
+        base: ProductionManifestDataset,
+    ) -> None:
+        self.base = base
+        self.records = base.records
+
+    def __len__(self) -> int:
+        return len(self.base)
+
+    @property
+    def epoch(self) -> int:
+        return int(self.base.epoch)
+
+    @epoch.setter
+    def epoch(self, value: int) -> None:
+        self.base.epoch = int(value)
+
+    def __getitem__(
+        self,
+        index: int,
+    ) -> dict[str, Any]:
+        item = dict(self.base[index])
+        item["labelled"] = True
+        item["target"] = int(
+            self.records[index]["original_class_id"]
+        )
+        return item
 
 
 def _class_count(config: dict[str, Any]) -> int:
@@ -474,26 +551,29 @@ def _branch_losses(
     else:
         supervised = logits.float().sum() * 0.0
 
-    pseudo = logits.detach().mean(dim=1).argmax(dim=1)
-    batch_size = features.shape[0]
+    if float(training["selex_weight"]) == 0.0:
+        contrastive = features.float().sum() * 0.0
+    else:
+        pseudo = logits.detach().mean(dim=1).argmax(dim=1)
+        batch_size = features.shape[0]
 
-    confusion = torch.eye(
-        2 * batch_size,
-        device=features.device,
-        dtype=features.dtype,
-    )
+        confusion = torch.eye(
+            2 * batch_size,
+            device=features.device,
+            dtype=features.dtype,
+        )
 
-    contrastive = selex_loss(
-        features,
-        targets.clamp_min(0),
-        labelled,
-        (pseudo,),
-        confusion,
-        temperature=float(training["temperature"]),
-        sup_con_weight=float(
-            training["supervised_weight"]
-        ),
-    )
+        contrastive = selex_loss(
+            features,
+            targets.clamp_min(0),
+            labelled,
+            (pseudo,),
+            confusion,
+            temperature=float(training["temperature"]),
+            sup_con_weight=float(
+                training["supervised_weight"]
+            ),
+        )
 
     return supervised, contrastive
 
@@ -810,6 +890,7 @@ def _backward_decoupled(
     delta_loss: torch.Tensor,
     accumulation: int,
     variant: str,
+    decouple_delta_gradients: bool = True,
 ) -> None:
     """Prevent detail objectives from corrupting backbone/head gradients."""
 
@@ -818,8 +899,14 @@ def _backward_decoupled(
 
     global_scaled = global_loss / accumulation
 
-    if variant == "selex":
-        global_scaled.backward()
+    if (
+        variant == "selex"
+        or not decouple_delta_gradients
+    ):
+        (
+            (global_loss + delta_loss)
+            / accumulation
+        ).backward()
         return
 
     global_scaled.backward(retain_graph=True)
@@ -1248,6 +1335,15 @@ def run(
     )
 
     training = config["training"]
+
+    if (
+        training.get("supervision_mode", "gcd")
+        == "fully_supervised"
+    ):
+        train_dataset = FullSupervisionDataset(
+            train_dataset
+        )
+
     generator = torch.Generator().manual_seed(seed)
 
     train_loader = DataLoader(
@@ -1339,6 +1435,16 @@ def run(
             )
         ),
         "seed": seed,
+        "supervision_mode": training.get(
+            "supervision_mode",
+            "gcd",
+        ),
+        "decouple_delta_gradients": bool(
+            training.get(
+                "decouple_delta_gradients",
+                True,
+            )
+        ),
         "environment": {
             "python": platform.python_version(),
             "torch": str(torch.__version__),
@@ -1426,6 +1532,12 @@ def run(
                 delta_loss=delta_loss,
                 accumulation=accumulation,
                 variant=config["method"]["variant"],
+                decouple_delta_gradients=bool(
+                    training.get(
+                        "decouple_delta_gradients",
+                        True,
+                    )
+                ),
             )
 
             for key, value in stats.items():
@@ -1521,6 +1633,16 @@ def run(
         "method": config["method"]["variant"],
         "dataset": config["dataset"]["name"],
         "seed": seed,
+        "supervision_mode": training.get(
+            "supervision_mode",
+            "gcd",
+        ),
+        "decouple_delta_gradients": bool(
+            training.get(
+                "decouple_delta_gradients",
+                True,
+            )
+        ),
         "metrics": metrics,
         "branch_metrics": branch_metrics,
         "diagnostics": diagnostics,
@@ -1577,6 +1699,15 @@ def smoke(config_path: str | Path) -> None:
         train=True,
     )
 
+    if (
+        config["training"].get(
+            "supervision_mode",
+            "gcd",
+        )
+        == "fully_supervised"
+    ):
+        dataset = FullSupervisionDataset(dataset)
+
     labelled_index = next(
         index
         for index, record in enumerate(dataset.records)
@@ -1627,6 +1758,12 @@ def smoke(config_path: str | Path) -> None:
         delta_loss=delta_loss,
         accumulation=1,
         variant=config["method"]["variant"],
+        decouple_delta_gradients=bool(
+            config["training"].get(
+                "decouple_delta_gradients",
+                True,
+            )
+        ),
     )
 
     loss = global_loss + delta_loss
