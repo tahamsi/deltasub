@@ -301,6 +301,59 @@ def bound_token_correction(
     return bounded, ratio
 
 
+
+def norm_controlled_correction(
+    direction_source: torch.Tensor,
+    parent_tokens: torch.Tensor,
+    *,
+    maximum_ratio: float,
+    scale: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Apply a directly controlled parent-relative correction norm."""
+
+    if direction_source.shape != parent_tokens.shape:
+        raise ValueError(
+            "direction source and parent tokens must match"
+        )
+    if not 0 < maximum_ratio <= 1:
+        raise ValueError(
+            "maximum_ratio must be in (0, 1]"
+        )
+
+    direction = F.normalize(
+        direction_source.float(),
+        dim=-1,
+        eps=1e-6,
+    ).to(direction_source)
+
+    parent_norm = parent_tokens.float().norm(
+        dim=-1,
+        keepdim=True,
+    ).clamp_min(1e-6)
+
+    ratio_value = (
+        float(maximum_ratio)
+        * scale.float()
+    ).clamp(
+        min=1e-6,
+        max=float(maximum_ratio),
+    )
+
+    correction = (
+        direction
+        * parent_norm.to(direction)
+        * ratio_value.to(direction)
+    )
+
+    ratio = torch.ones(
+        parent_tokens.shape[:2],
+        device=parent_tokens.device,
+        dtype=torch.float32,
+    ) * ratio_value
+
+    return correction, ratio
+
+
 class DeltaSubResidual(nn.Module):
     """Dense missing-information correction for late DINOv2 tokens."""
 
@@ -573,14 +626,18 @@ class DeltaSubResidual(nn.Module):
 
         scale = torch.sigmoid(
             self.injection_scale_logit
-        ).to(transported)
+        )
 
-        transported = scale * transported
-
-        correction, ratio = bound_token_correction(
-            transported,
-            parent_tokens,
-            self.config.maximum_correction_ratio,
+        correction, ratio = (
+            norm_controlled_correction(
+                transported,
+                parent_tokens,
+                maximum_ratio=(
+                    self.config
+                    .maximum_correction_ratio
+                ),
+                scale=scale,
+            )
         )
 
         return correction, ratio, scale

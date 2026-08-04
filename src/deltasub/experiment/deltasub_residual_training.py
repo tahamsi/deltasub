@@ -53,6 +53,9 @@ from .training import (
     _atomic_text,
     _worker_seed,
 )
+from .deltasub_residual_compare import (
+    locate_matched_baseline,
+)
 
 
 SCHEMA = "deltasub-residual.experiment.v1"
@@ -278,6 +281,95 @@ def construct_model(
     )
 
     return model.to(device)
+
+
+
+def warm_start_from_matched_selex(
+    model: DeltaSubResidual,
+) -> dict[str, Any]:
+    """Load and freeze the matched practical SelEx backbone and head."""
+
+    result_path, _ = locate_matched_baseline()
+    checkpoint_path = (
+        result_path.parent
+        / "checkpoint_last.pt"
+    )
+
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(
+            checkpoint_path
+        )
+
+    state = load_checkpoint(
+        checkpoint_path,
+        map_location="cpu",
+    )
+
+    source = state.get("model")
+
+    if not isinstance(source, dict):
+        raise ValueError(
+            "matched SelEx checkpoint has no model state"
+        )
+
+    transferable = {
+        name: tensor
+        for name, tensor in source.items()
+        if (
+            name.startswith("backbone.")
+            or name.startswith("head.")
+        )
+    }
+
+    if not transferable:
+        raise ValueError(
+            "matched SelEx checkpoint contains no "
+            "backbone/head tensors"
+        )
+
+    incompatible = model.load_state_dict(
+        transferable,
+        strict=False,
+    )
+
+    critical_missing = [
+        name
+        for name in incompatible.missing_keys
+        if (
+            name.startswith("backbone.")
+            or name.startswith("head.")
+        )
+    ]
+
+    if (
+        critical_missing
+        or incompatible.unexpected_keys
+    ):
+        raise ValueError(
+            "matched SelEx warm start mismatch: "
+            f"missing={critical_missing}, "
+            f"unexpected="
+            f"{incompatible.unexpected_keys}"
+        )
+
+    for name, parameter in (
+        model.named_parameters()
+    ):
+        if (
+            name.startswith("backbone.")
+            or name.startswith("head.")
+        ):
+            parameter.requires_grad = False
+
+    return {
+        "result": str(result_path),
+        "checkpoint": str(checkpoint_path),
+        "checkpoint_sha256": (
+            sha256_file(checkpoint_path)
+        ),
+        "backbone_frozen": True,
+        "head_frozen": True,
+    }
 
 
 def with_hmean(
@@ -543,9 +635,10 @@ def training_batch(
         * refined_selex
     )
 
-    task = 0.5 * (
-        global_task + refined_task
-    )
+    # The matched baseline is frozen. The task must therefore
+    # be solved through the residual correction rather than by
+    # silently improving the shared backbone or classifier.
+    task = refined_task
 
     consistency = cross_view_residual_loss(
         branches["residual_tokens"]
@@ -565,13 +658,32 @@ def training_batch(
         )
     )
 
+    # Apply anti-collapse regularization to the transported
+    # correction, not merely to the raw residual descriptor.
     variance = residual_variance_loss(
-        branches["residual_tokens"]
+        branches["corrections"]
     )
 
-    budget = branches[
+    correction_ratio = branches[
         "correction_ratio"
-    ].float().mean()
+    ].float().clamp_min(1e-6)
+
+    target_ratio = float(
+        training["target_correction_ratio"]
+    )
+
+    if target_ratio <= 0:
+        raise ValueError(
+            "target_correction_ratio must be positive"
+        )
+
+    budget = F.smooth_l1_loss(
+        correction_ratio.log(),
+        torch.full_like(
+            correction_ratio,
+            math.log(target_ratio),
+        ),
+    )
 
     preservation = preservation_penalty(
         fused_logits=branches[
@@ -1145,8 +1257,12 @@ def run(
         device=device,
     )
 
-    # Keep the matched backbone/head RNG trajectory.
+    # Keep module construction from changing the matched RNG path.
     seed_everything(seed)
+
+    warm_start = warm_start_from_matched_selex(
+        model
+    )
 
     optimizer, parameters, group_counts = (
         optimizer_for(
@@ -1239,6 +1355,7 @@ def run(
         "no_oracle": True,
         "no_patch_selection": True,
         "sequence_length_preserved": True,
+        "matched_warm_start": warm_start,
         "environment": {
             "python": platform.python_version(),
             "torch": str(
@@ -1505,6 +1622,7 @@ def run(
         "branch_metrics": branch_metrics,
         "diagnostics": diagnostics,
         "configuration": config["method"],
+        "matched_warm_start": warm_start,
         "checkpoint_selection": (
             "fixed final epoch; test labels "
             "used only after training"
@@ -1639,6 +1757,7 @@ def smoke(
         config,
         device=device,
     )
+    warm_start_from_matched_selex(model)
     model.train()
 
     with torch.autocast(
@@ -1680,9 +1799,6 @@ def smoke(
         )
 
     required = [
-        "backbone.model.blocks.10",
-        "backbone.model.blocks.11",
-        "head",
         "local_encoder",
         "transport_down",
         "transport_up",
@@ -1711,6 +1827,21 @@ def smoke(
             raise RuntimeError(
                 f"{prefix} received no gradient"
             )
+
+    frozen_gradient = [
+        name
+        for name in gradients
+        if (
+            name.startswith("backbone.")
+            or name.startswith("head.")
+        )
+    ]
+
+    if frozen_gradient:
+        raise RuntimeError(
+            "frozen matched baseline received gradients: "
+            f"{frozen_gradient[:5]}"
+        )
 
     print("status: passed")
     print(

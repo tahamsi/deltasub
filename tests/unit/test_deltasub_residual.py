@@ -6,6 +6,7 @@ from deltasub.models.deltasub_residual import (
     DeltaSubResidualConfig,
     LocalGridEncoder,
     bound_token_correction,
+    norm_controlled_correction,
     remove_semantic_subspace,
 )
 
@@ -118,3 +119,43 @@ def test_projection_requires_prediction_residual() -> None:
         raise AssertionError(
             "invalid configuration was accepted"
         )
+
+
+def test_norm_controlled_correction_has_requested_ratio() -> None:
+    torch.manual_seed(13)
+
+    direction = torch.randn(
+        2,
+        256,
+        32,
+    )
+    parents = torch.randn(
+        2,
+        256,
+        32,
+    )
+
+    correction, ratio = norm_controlled_correction(
+        direction,
+        parents,
+        maximum_ratio=0.1,
+        scale=torch.tensor(0.05),
+    )
+
+    measured = (
+        correction.float().norm(dim=-1)
+        / parents.float().norm(dim=-1)
+    )
+
+    assert torch.allclose(
+        ratio,
+        torch.full_like(ratio, 0.005),
+        atol=1e-6,
+        rtol=1e-5,
+    )
+    assert torch.allclose(
+        measured,
+        ratio,
+        atol=1e-5,
+        rtol=1e-4,
+    )
