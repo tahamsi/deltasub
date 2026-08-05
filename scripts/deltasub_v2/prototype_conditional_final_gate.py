@@ -219,12 +219,12 @@ def global_pass(model, loader, device, cache_path):
     features, targets, old, sample_ids = [], [], [], []
     for batch_number, batch in enumerate(loader, 1):
         views = batch["views"].to(device)
-        batch, count = views.shape[:2]
+        batch_size, count = views.shape[:2]
         with torch.autocast("cuda", dtype=torch.bfloat16):
             value = model.backbone(
-                views.reshape(batch * count, 3, 224, 224)
+                views.reshape(batch_size * count, 3, 224, 224)
             ).cls_token
-        features.append(value.reshape(batch, count, DIM).float().cpu().numpy())
+        features.append(value.reshape(batch_size, count, DIM).float().cpu().numpy())
         targets.extend(batch["target"].tolist())
         old.extend(batch["old"].tolist())
         sample_ids.extend([str(v) for v in batch["sample_id"]])
