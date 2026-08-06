@@ -329,7 +329,7 @@ def run(args: argparse.Namespace) -> None:
     seed = int(config["seed"])
     seed_everything(seed)
     device = torch.device("cuda:0")
-    torch.cuda.reset_peak_memory_stats(device)
+    torch.cuda.reset_peak_memory_stats()
     started = time.perf_counter()
 
     model, baseline_config, _, provenance = IG.load_matched_baseline(device)
@@ -737,10 +737,10 @@ def run(args: argparse.Namespace) -> None:
             "python": platform.python_version(),
             "torch": str(torch.__version__),
             "cuda": str(torch.version.cuda),
-            "device": torch.cuda.get_device_name(device),
+            "device": torch.cuda.get_device_name(),
         },
         "runtime_seconds": time.perf_counter() - started,
-        "peak_cuda_memory_bytes": int(torch.cuda.max_memory_allocated(device)),
+        "peak_cuda_memory_bytes": int(torch.cuda.max_memory_allocated()),
     }
     _atomic_json(result_path, result)
 
