@@ -1,0 +1,76 @@
+schema_version: regretgcd.sota-registry.v1
+metric_units: percent
+protocol_note: >-
+  Paper-reported values are references, not matched comparisons. Direct ranking is
+  forbidden unless backbone checkpoint, labelled split, augmentation, optimization,
+  class-count assumption, and GCD-v2 evaluator are independently matched.
+entries:
+  - method: SelEx
+    variant: DINOv2 baseline reported by SubViT
+    year: 2026
+    venue: arXiv
+    source: https://arxiv.org/abs/2607.09086
+    backbone: DINOv2 ViT-B/14
+    protocol: SelEx training, final two blocks fine-tuned, SSB fine-grained splits
+    status: paper_reported_reference_only
+    metrics:
+      cub: {all: 87.4, old: 85.1, new: 88.5}
+      aircraft: {all: 79.8, old: 82.3, new: 78.6}
+      cars: {all: 82.2, old: 93.7, new: 76.7}
+  - method: SubViT
+    variant: DINOv2
+    year: 2026
+    venue: arXiv
+    source: https://arxiv.org/abs/2607.09086
+    backbone: DINOv2 ViT-B/14
+    protocol: SelEx training with selective subtoken refinement
+    status: paper_reported_reference_only
+    metrics:
+      cub: {all: 91.8, old: 86.3, new: 94.6}
+      aircraft: {all: 80.8, old: 81.3, new: 80.5}
+      cars: {all: 83.8, old: 94.9, new: 78.5}
+  - method: SelEx
+    variant: DINOv2 baseline reported by ConGCD
+    year: 2025
+    venue: ICCV
+    source: https://arxiv.org/abs/2508.10731
+    backbone: DINOv2
+    protocol: ConGCD paper protocol
+    status: paper_reported_reference_only
+    metrics:
+      cub: {all: 86.0, old: 86.5, new: 85.7}
+      aircraft: {all: 82.1, old: 84.8, new: 80.7}
+      cars: {all: 80.5, old: 91.8, new: 75.0}
+  - method: ConGCD
+    variant: SelEx + multiplex consensus
+    year: 2025
+    venue: ICCV
+    source: https://arxiv.org/abs/2508.10731
+    backbone: DINOv2
+    protocol: ConGCD paper protocol
+    status: paper_reported_reference_only
+    metrics:
+      cub: {all: 86.3, old: 87.4, new: 85.8}
+      aircraft: {all: 81.7, old: 83.3, new: 81.0}
+      cars: {all: 79.8, old: 93.1, new: 73.3}
+related_current_methods:
+  - method: APL
+    year: 2025
+    venue: CVPR
+    source: https://arxiv.org/abs/2507.06928
+    mechanism: shared adaptive part queries and all-min contrastive learning
+  - method: AptGCD
+    year: 2025
+    venue: CVPR
+    source: https://openaccess.thecvf.com/content/CVPR2025/html/Zhang_Less_Attention_is_More_Prompt_Transformer_for_Generalized_Category_Discovery_CVPR_2025_paper.html
+    mechanism: meta visual prompts and a local-global prompt transformer
+  - method: AllGCD
+    year: 2025
+    venue: ICCV
+    source: https://openaccess.thecvf.com/content/ICCV2025/html/Cao_AllGCD_Leveraging_All_Unlabeled_Data_for_Generalized_Category_Discovery_ICCV_2025_paper.html
+    mechanism: contrastive use of all unlabeled data
+  - method: AFGCD
+    year: 2025
+    venue: ICCV
+    source: https://openaccess.thecvf.com/content/ICCV2025/html/Xu_A_Hidden_Stumbling_Block_in_Generalized_Category_Discovery_Distracted_Attention_ICCV_2025_paper.html
+    mechanism: multi-scale token importance and adaptive pruning

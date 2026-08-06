@@ -1,0 +1,30 @@
+schema_version: regretgcd.gate1.v1
+dataset: cub
+seed: 0
+output_directory: artifacts/regretgcd/cub/seed_0
+source:
+  prototype_archive: artifacts/deltasub_prototype_conditional/cub/seed_0/predictions.npz
+  prototype_result: artifacts/deltasub_prototype_conditional/cub/seed_0/result.json
+  gate0_result: artifacts/regretgcd/cub/seed_0/gate0_result.json
+  reusable_test_features: artifacts/deltasub_prototype_conditional/cub/seed_0/global_features.npz
+extraction:
+  batch_size: 16
+  num_workers: 4
+  views:
+    - original
+    - low_saturation
+    - mild_blur
+    - dimmed
+prototype:
+  temperature: 0.10
+router:
+  folds: 5
+  bootstrap_draws: 5000
+  minimum_oof_auc: 0.55
+gate:
+  all_delta_minimum: 0.0
+  old_delta_minimum: 0.01
+  new_delta_minimum: -0.005
+  hmean_delta_minimum: 0.01
+  hmean_lower_95_above_zero: true
+  beat_every_non_oracle_control: true

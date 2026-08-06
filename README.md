@@ -1,492 +1,368 @@
-# DeltaSub
+# RegretGCD
 
-DeltaSub is a research repository for testing counterfactual value-of-subdivision
-routing in fine-grained generalized category discovery. The repository currently
-provides tested token geometry, Haar detail tokens, exact per-anchor SelEx reduction,
-deterministic paired counterfactual gain collection, content-addressed gain caches,
-pre-transformer gain-router training, manifests, result schemas, and synthetic
-diagnostics, deterministic adaptive execution, and an isolated clean-room SubViT
-diagnostic reference. Benchmark experiments are not implemented.
+**RegretGCD learns when a parametric GCD classifier should defer to a transductive prototype classifier.**
 
-It does **not** contain completed CUB, Aircraft, Cars, CIFAR-10, or ImageNet-100
-experiments. Synthetic metrics are marked `synthetic_only: true` and are excluded from
-paper tables. Several requested baselines remain unavailable or require clean-room
-reimplementation; see `BASELINE_STATUS.md`.
+The repository previously investigated DeltaSub, a selective subtoken-refinement method. Those experiments found a real oracle opportunity but no label-free patch selector that reliably converted it into improved generalized category discovery. DeltaSub is therefore archived as a negative result. RegretGCD keeps the useful lesson and discards the failing mechanism: instead of asking *which patch should be refined?*, it asks *which of two already available category decisions is less likely to be wrong for this sample?*
 
-## Local installation and validation
+This is not a decorative mixture-of-experts layer. It is a bounded, leak-resistant learning-to-defer experiment with a predeclared Gate 1. If the class-held-out router fails the gate, the method is abandoned. Science occasionally benefits from an exit condition, a concept humans otherwise reserve for fire drills.
 
-Use Python 3.10 or newer:
+## Current status
+
+Gate 0 established that the two experts are genuinely complementary on CUB seed 0:
+
+| Method | All | Old | New | H-mean |
+|---|---:|---:|---:|---:|
+| Matched SelEx parametric expert | 47.8426 | 81.5881 | 14.3986 | 24.4775 |
+| Leave-one-out prototype expert | 47.8599 | 74.4799 | 21.4777 | 33.3409 |
+| Diagnostic oracle arbitration | 55.5057 | 84.2580 | 27.0103 | 40.9071 |
+
+The oracle improves H-mean by **7.5663 points** over the prototype expert, with a paired-bootstrap interval of **[5.2441, 10.6763] points**. The parametric expert is uniquely correct on 443 samples and the prototype expert on 444 samples. Gate 0 uses test labels and is **only an upper-bound diagnostic**. It is not a deployable method and is never reported as RegretGCD performance.
+
+Gate 1, implemented here, trains a router using only genuinely labelled training examples from known classes and evaluates once on the test set. No Gate-1 result is claimed until `artifacts/regretgcd/cub/seed_0/result.json` exists.
+
+## Problem formulation
+
+Let the unlabeled evaluation set be
+
+\[
+\mathcal U=\{x_i\}_{i=1}^{N},
+\]
+
+containing both known and novel categories. RegretGCD has two fixed experts:
+
+- a parametric expert \(E_p\), the matched SelEx classifier;
+- a transductive prototype expert \(E_t\), built from multi-view test features without test labels.
+
+The experts output cluster identifiers
+
+\[
+\hat y_i^p = E_p(x_i),
+\qquad
+\hat y_i^t = E_t(x_i).
+\]
+
+The router estimates the probability that the prototype expert has lower sample-level regret than the parametric expert:
+
+\[
+q_i = \sigma(g_\theta(z_i))
+\approx
+P(c_{i,t} < c_{i,p}\mid z_i),
+\]
+
+where \(z_i\) contains only label-free decision geometry and \(c_{i,e}\) is the error cost of expert \(e\).
+
+At inference, routing is conservative and occurs only when the experts disagree:
+
+\[
+\hat y_i =
+\begin{cases}
+\hat y_i^t,
+& \hat y_i^p \neq \hat y_i^t \text{ and } q_i \ge \tau,\\
+\hat y_i^p,
+& \text{otherwise.}
+\end{cases}
+\]
+
+The threshold \(\tau\) is selected from class-held-out predictions on labelled training data. Test labels do not train the router, choose features, select \(\tau\), or select an ablation.
+
+## Expert 1: matched parametric classifier
+
+For \(V=4\) deterministic views, the parametric expert produces logits
+
+\[
+\ell_{i}^{p,v}\in\mathbb R^C,
+\qquad
+P_i^{p,v}=\operatorname{softmax}(\ell_i^{p,v}).
+\]
+
+The views are:
+
+1. center-cropped original image;
+2. low-saturation image;
+3. mildly blurred image;
+4. mildly dimmed image.
+
+The hard test prediction remains the archived matched SelEx prediction used by Gate 0. Multi-view probabilities are router features, not a silent replacement of the expert.
+
+## Expert 2: transductive leave-one-out prototypes
+
+Let \(h_i^v\in\mathbb R^d\) be the normalized DINOv2 CLS feature for view \(v\). The multi-view feature is
+
+\[
+\bar h_i =
+\operatorname{norm}\left(
+\frac{1}{V}
+\sum_{v=1}^{V}
+\operatorname{norm}(h_i^v)
+\right).
+\]
+
+Test samples are grouped by the parametric pseudo-label \(\hat y_i^p\). The prototype for pseudo-class \(c\) is
+
+\[
+p_c =
+\operatorname{norm}\left(
+\sum_{i:\hat y_i^p=c}\bar h_i
+\right).
+\]
+
+A test sample is excluded from its own assigned prototype:
+
+\[
+p_{c,-i} =
+\operatorname{norm}\left(
+\sum_{j:\hat y_j^p=c,\,j\neq i}\bar h_j
+\right).
+\]
+
+The view-level prototype score is
+
+\[
+s_{ic}^{t,v}=
+\frac{\langle h_i^v,p_c^{(-i)}\rangle}{T_t},
+\qquad T_t=0.10.
+\]
+
+Leave-one-out construction prevents a sample from improving its own prototype score merely by being included in the centroid. Singleton clusters fall back to the full prototype and are counted in the result artifact.
+
+## Regret supervision from labelled known classes
+
+Cluster identifiers are permutation invariant. A Hungarian mapping \(\pi\) is therefore fitted **only on genuinely labelled training examples** using the parametric expert:
+
+\[
+\pi^*=
+\arg\max_\pi
+\sum_{i\in\mathcal L}
+\mathbf 1[\pi(\hat y_i^p)=y_i].
+\]
+
+Both experts share this pseudo-label space, so the same mapping evaluates their training decisions. Their costs are
+
+\[
+c_{i,p}=\mathbf 1[\pi^*(\hat y_i^p)\neq y_i],
+\qquad
+c_{i,t}=\mathbf 1[\pi^*(\hat y_i^t)\neq y_i].
+\]
+
+The signed regret target is
+
+\[
+r_i=c_{i,p}-c_{i,t}\in\{-1,0,1\}.
+\]
+
+Only unique-winner examples, \(|r_i|=1\), supervise the router. The binary target is
+
+\[
+t_i=\mathbf 1[r_i=1],
+\]
+
+where \(t_i=1\) means the prototype expert is correct and the parametric expert is wrong. The standardized logistic router minimizes
+
+\[
+\mathcal L(\theta)=
+-\sum_{i\in\mathcal W}
+\left[
+ t_i\log q_i+(1-t_i)\log(1-q_i)
+\right]
++\lambda\|\theta\|_2^2,
+\]
+
+with balanced classes and \(\mathcal W=\{i:|r_i|=1\}\). Logistic regression is intentional. The claim concerns transferable regret estimation, not whether a needlessly ornate MLP can memorize bird species.
+
+## Class-held-out validation
+
+Instance-level random validation is overly optimistic because near-duplicate examples from the same known category may appear in both training and validation. RegretGCD instead partitions **known classes**, not samples, into deterministic folds.
+
+For fold \(k\):
+
+\[
+\theta_{-k}
+=\operatorname{fit}
+\left(
+\mathcal L\setminus\mathcal L_k
+\right),
+\]
+
+and every example from held-out classes \(\mathcal L_k\) receives an out-of-fold regret probability. These probabilities select \(\tau\) and measure unique-winner ROC AUC. A separate instance-held-out router is retained as an ablation to expose any gain from class leakage.
+
+## Router features
+
+All features are scalar, class-permutation invariant, and available without test labels.
+
+### Parametric confidence
+
+\[
+\max_c \bar P_{ic}^p,
+\qquad
+\max_c \bar P_{ic}^p-\max_{c\neq c^*}\bar P_{ic}^p,
+\qquad
+\frac{H(\bar P_i^p)}{\log C}.
+\]
+
+### Prototype confidence and density
+
+The same confidence, margin, and entropy statistics are computed for prototype probabilities. Density features include the top prototype cosine similarity, runner-up similarity, similarity gap, and log pseudo-cluster size.
+
+### Cross-view stability
+
+For each expert, RegretGCD includes view vote agreement and generalized Jensen-Shannon divergence:
+
+\[
+\operatorname{JSD}(P_i^1,\ldots,P_i^V)
+=
+\frac1V\sum_{v=1}^V
+D_{KL}(P_i^v\|\bar P_i).
+\]
+
+### Cross-expert geometry
+
+Features include expert agreement, symmetric JSD between expert distributions, each expert's probability assigned to the other expert's decision, confidence difference, and entropy difference.
+
+### Knownness
+
+Labelled known-class centroids are computed from training features. Training features use leave-one-out centroids. The router receives only the maximum known-centroid similarity and the top-two similarity gap, not a class identity.
+
+## Gate 1
+
+RegretGCD survives only if the full class-held-out router satisfies every condition against the prototype control:
+
+\[
+\Delta\text{All}\ge0,
+\qquad
+\Delta\text{Old}\ge1.0\text{ point},
+\]
+
+\[
+\Delta\text{New}\ge-0.5\text{ point},
+\qquad
+\Delta H\ge1.0\text{ point},
+\]
+
+and additionally:
+
+- the fixed-alignment stratified paired-bootstrap lower 95% bound for \(\Delta H\) is positive;
+- class-held-out unique-winner AUC is at least 0.55;
+- full RegretGCD has strictly higher H-mean than every non-oracle control and ablation.
+
+A pass authorizes three CUB seeds and then three Aircraft seeds. A failure closes RegretGCD. Cars remains `not_run` with reason `dataset unavailable by user choice`.
+
+## Ablations and controls
+
+Gate 1 evaluates all variants from the same cached features:
+
+| Variant | Purpose |
+|---|---|
+| `matched_selex` | Always use the parametric expert |
+| `prototype_control` | Always use the prototype expert |
+| `maximum_confidence` | Choose the expert with larger maximum probability |
+| `minimum_entropy` | Choose the expert with lower entropy |
+| `knownness_only` | Train a router using only known-centroid geometry |
+| `global_probability_blend` | Tune a single global mixing coefficient on labelled training data |
+| `random_matched_switch_rate` | Randomly switch the same number of disagreements as RegretGCD |
+| `instance_holdout_router` | Replace class-held-out validation with sample-held-out validation |
+| `without_stability` | Remove view agreement and view JSD |
+| `without_density` | Remove prototype density and cluster-size features |
+| `without_knownness` | Remove known-centroid features |
+| `without_cross_expert` | Remove expert-interaction features |
+| `oracle_arbitration_diagnostic` | Test-label upper bound, excluded from the gate |
+
+## Statistical evaluation
+
+Point metrics use the repository's pinned GCD-v2 evaluator with one global Hungarian assignment. The paired confidence interval fixes each method's full-dataset Hungarian mapping, converts predictions to paired correctness indicators, and resamples Old and New strata separately. This avoids the unstable intervals produced when cluster mappings are independently re-estimated inside every bootstrap draw.
+
+For resample \(b\):
+
+\[
+\Delta H^{(b)}=
+H(A_{old}^{r,b},A_{new}^{r,b})
+-
+H(A_{old}^{t,b},A_{new}^{t,b}),
+\]
+
+where
+
+\[
+H(a,b)=\frac{2ab}{a+b}.
+\]
+
+## Running Gate 1
+
+Requirements already used by the repository:
+
+- one visible CUDA GPU;
+- the pinned DINOv2 source and checkpoint;
+- completed matched SelEx artifacts;
+- completed Gate-0 prototype artifacts;
+- `.venv` with repository dependencies.
+
+Launch the entire bounded experiment from the repository root:
 
 ```bash
-python -m pip install -e '.[dev]'
-make smoke
+bash scripts/regretgcd/launch_gate1.sh
 ```
 
-The smoke command runs the unit and integration tests, checks the environment, executes
-one tiny optimization step, verifies deterministic repeated base evaluation, collects
-paired gains for a two-image subset, tests resume, and writes a complete synthetic run
-under `artifacts/runs/synthetic_smoke`.
-
-To rerun directly:
-
-```bash
-PYTHONPATH=src python -m unittest discover -s tests -p 'test_*.py' -v
-PYTHONPATH=src python -m deltasub.cli smoke \
-  --output artifacts/runs/synthetic_smoke \
-  --size 8 --seed 0 --device cpu --resume
-```
-
-## Running on one A100 80 GB
-
-Clone or copy the repository onto the server, create an isolated environment, install a
-CUDA-compatible PyTorch build, and install DeltaSub:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-# Install the PyTorch build appropriate for the server CUDA driver first.
-python -m pip install -e '.[dev,data]'
-nvidia-smi
-bash scripts/run_a100_diagnostic.sh
-```
-
-The script uses only `CUDA_VISIBLE_DEVICES=0`, runs jobs sequentially, measures memory,
-and performs a small CUDA smoke run. It does not invoke DDP or launch a real-data sweep.
-The measured recommendations are written to `artifacts/hardware_profile.yaml`.
-
-Before real research training, supply:
-
-1. Legally obtained CUB, FGVC-Aircraft, and Stanford Cars data.
-2. Exact SelEx/SSB class-split files from the pinned local upstream checkout. JSON,
-   YAML, and trusted pinned pickle formats are supported; their SHA256 and provenance
-   are recorded in `split_validation.json`.
-3. The official DINOv2 ViT-B/14 checkpoint and recorded SHA256.
-4. A gate generated by `selex verify-equivalence`; validation re-executes the pinned
-   reference and validates the reference and production source hashes.
-
-This repository intentionally refuses to present a synthetic implementation as a
-reproduction of SelEx or any unavailable baseline.
-
-## M9 seed-0 diagnostic gate
-
-M9 provides strict real-asset preflight and campaign/verdict artifacts. Preflight reads
-and hashes assets and strictly loads the official checkpoint, but never starts training.
-Cars is recorded independently as `not_run` with reason `dataset unavailable by user
-choice`, so it does not prevent CUB or Aircraft preflight. The bounded diagnostic budget
-is 20 frozen-baseline epochs; DeltaSub uses at most 512 gain images with four candidates
-each, 10 router epochs, 10 adaptive-head epochs, and fixed K=16. These reductions are
-explicitly diagnostic-only.
-
-```bash
-python -m deltasub.cli diagnostic preflight --config configs/diagnostic/cub_seed0.yaml
-python -m deltasub.cli diagnostic preflight --config configs/diagnostic/aircraft_seed0.yaml
-python -m deltasub.cli diagnostic run --config configs/diagnostic/cub_seed0.yaml --resume
-python -m deltasub.cli diagnostic run --config configs/diagnostic/aircraft_seed0.yaml --resume
-python -m deltasub.cli diagnostic summarize --output-root artifacts/diagnostic/m9
-```
-
-The summary command records Cars without touching its dataset. A dataset verdict is
-positive when `DeltaSub gcd_all_v2 - baseline gcd_all_v2 >= minimum_delta` and is
-strictly above zero; negative when it is below `-minimum_delta`; otherwise it is neutral.
-Missing provenance, execution failures, and missing metrics are invalid. A positive
-campaign only writes an authorization-ready report and never starts core/full work.
-
-At this revision, the strict preflight and verdict layer is implemented, but the command
-still fails closed before training because M0--M8 lack a production M6 trainer and common
-GCD-v2 evaluator. It never routes through fixture-only M8 adapters.
-
-## M5 gain router
-
-The M5 router runs before DINOv2's transformer blocks. A compact shared MLP scores every
-row-major parent patch from its 768-dimensional patch embedding, the pooled mean of all
-256 parents, and normalized row/column coordinates. Optional learned parent positions
-remain pre-transformer. Counterfactual details, post-transformer features, M4 labels,
-selection outputs, and token counts are forbidden as production features.
-
-Its regression target is exactly M4's anchor loss reduction:
-`base_per_anchor_loss - counterfactual_per_anchor_loss`. Exact provenance joins prevent
-row-number joins or changed augmentation/batch contexts. SHA256 sample-level splitting
-keeps every candidate, view, and context for a stable sample in one split.
-
-Training combines deterministic uniform parent coverage with an informative stream based
-only on immutable training-cache gains. The optimization objective is defined over this
-mixture, so inverse-propensity weighting is not enabled or implied. Validation uses all
-held-out records. A bounded deterministic replay buffer stores record identifiers and
-post-training residual priorities, never copied feature tensors or mutable labels.
-
-The objective is
-`w_reg * mean(Huber(score, gain)) + w_rank * mean(softplus(-(score_hi-score_lo)))`
-plus optional positive-gain BCE and regularization. Terms use valid anchors only;
-ranking pairs are deterministic, within the same sample/context, and require target
-difference above the configured margin. Empty pair sets contribute a finite zero.
-
-Run the non-reportable CPU fixture and inspect its checkpoint with:
-
-```bash
-python -m deltasub.cli router fixture --output artifacts/router/m5_fixture
-python -m deltasub.cli router fixture --output artifacts/router/m5_fixture --resume
-python -m deltasub.cli router inspect artifacts/router/m5_fixture/training/checkpoint_last.pt
-```
-
-MAE, RMSE, Huber, Pearson, Spearman, pairwise concordance, NDCG, sign quality, and
-quantile calibration are validation metrics. Top-K recall is diagnostic only: M5 does
-not execute top-K routing, insert detail tokens, control a budget, or claim compute
-savings. Those production execution mechanisms remain M6 work.
-
-## M7 SubViT diagnostic reference
-
-M7 is a source-attributed clean-room implementation of behavior described by the SubViT
-paper; it is not official and does not claim exact paper reproduction. SubViT ATS keeps
-every original parent and adds `f*f` direct spatial children for each selected parent.
-With `f=2`, that is four children. DeltaSub instead adds three Haar detail tokens, so
-the mechanisms and token budgets are explicitly different.
-
-The diagnostic uses per-head CLS-to-parent attention, seeded Stage-1 head sampling, and
-Stage-2 maximum feature degradation. Stage 2 masks only deterministic top-K parents,
-computes FP32 L2 distance from the same frozen teacher, and breaks ties by lowest head.
-Those extra teacher forwards occur only during training diagnostics. The separate
-distilled router accepts only pre-transformer parents, emits one `[B,256]` map, and
-needs one transformer pass at inference.
-
-The router objective combines temperature-scaled map KL (`batchmean`, multiplied by
-`T^2`), mean logistic loss over strict teacher-order pairs, and mean BCE over all 256
-top-K mask entries. Top-K ties use ascending parent index; no-pair examples contribute
-finite zero. Undefined diagnostics are JSON `null` with a reason, never NaN. Attention
-is not ground truth, and diagnostics cannot alter M4–M6 production decisions.
-
-```bash
-python -m deltasub.cli subvit fixture --output artifacts/subvit/m7_fixture
-python -m deltasub.cli subvit fixture --output artifacts/subvit/m7_fixture --resume
-python -m deltasub.cli subvit inspect artifacts/subvit/m7_fixture/training/checkpoint_last.pt
-```
-
-Every M7 fixture says `SYNTHETIC DIAGNOSTIC NON-REPORTABLE`. M9's separate `experiment`
-surface is the only production campaign path; no paper result has yet been produced.
-
-## Result artifacts
-
-Every synthetic smoke run writes the same required artifact envelope expected from a
-real run:
+The launcher detaches from the terminal, redirects stdin from `/dev/null`, and prints exact PID, log, and exit-code paths. Gate 1 is resume-safe:
 
 ```text
-config.yaml
-resolved_config.yaml
-environment.json
-git_commit.txt
-dataset_manifest_checksum.txt
-backbone_checkpoint_hash.txt
-metrics.json
-metrics.jsonl
-selection_statistics.parquet
-efficiency.json
-compute.json
-checkpoint_best.pt
-checkpoint_last.pt
-stdout.log
-stderr.log
+artifacts/regretgcd/cub/seed_0/
+├── labelled_train_cache.npz
+├── test_cache.npz
+├── router_regretgcd.npz
+├── router_regretgcd.json
+├── router_*.npz
+├── predictions.npz
+├── metrics.csv
+├── result.json
+└── comparison/
+    ├── comparison.md
+    ├── internal_matched.csv
+    └── published_references.csv
 ```
 
-Inspect a run with:
+Inspect the final decision:
 
 ```bash
-python -m json.tool artifacts/runs/synthetic_smoke/metrics.json
-python -m json.tool artifacts/runs/synthetic_smoke/compute.json
-python - <<'PY'
-import pandas as pd
-print(pd.read_parquet("artifacts/runs/synthetic_smoke/selection_statistics.parquet"))
-PY
+cat artifacts/regretgcd/cub/seed_0/result.json | \
+  .venv/bin/python -m json.tool
+cat artifacts/regretgcd/cub/seed_0/comparison/comparison.md
 ```
 
-Generate CSV, Markdown, and LaTeX tables from completed **non-synthetic** runs:
+## SOTA comparison policy
 
-```bash
-bash scripts/collect_results.sh
-```
+`scripts/regretgcd/compare_sota.py` separates two tables:
 
-The command exits rather than aggregating synthetic metrics. Generated tables are placed
-under `paper/generated_tables/`. Archive `artifacts/runs`, `artifacts/compute_report.csv`,
-the generated table/figure directories, `DIAGNOSTIC_VERDICT.md`, and the Git commit SHA
-together to preserve reproducibility.
+1. **matched in-repository methods**, which share samples, expert artifacts, and evaluator;
+2. **paper-reported references**, which are not ranked against RegretGCD until their protocols are matched.
 
-## M1 data manifests
+The registry currently includes exact DINOv2 values reported by the SubViT and ConGCD papers, plus research metadata for APL, AptGCD, AllGCD, and AFGCD. The current literature increasingly attacks fine-grained GCD through part learning, prompt-based local-global fusion, all-unlabeled contrastive learning, token pruning, visual primitives, and selective subtokenization. RegretGCD is orthogonal: it learns sample-level deferral between a parametric decision and a transductive geometric decision.
 
-The M1 manifest schema is versioned and requires sample identity, dataset/path, original
-class ID/name, known/novel and labelled/unlabelled assignments, train/test membership,
-optional bounding boxes, source archive SHA256, and exact split provenance. JSONL records
-are sorted canonically before serialization, so repeated preparation from the same data,
-split file, and configuration produces the same bytes and checksum.
+A direct SOTA claim is forbidden until the in-repository matched SelEx baseline reproduces the relevant published baseline within a declared tolerance. The existing seed-0 baseline is far below published DINOv2 SelEx references, so combining those values into one ranked table would be numerically easy and scientifically useless.
 
-Preparation is local-only. CUB and Aircraft retain their explicit official download
-command, Cars requires `--source manual`, and ImageNet-100 requires a licensed
-ImageNet-1K root and is never downloaded. CIFAR-10 binary batches are losslessly
-extracted to local PPM files. Every preparation requires archive checksum provenance and
-an exact local split file; absent inputs fail with an actionable error.
+## Relationship to learning to defer
 
-Example command surface:
+RegretGCD is related to learning-to-defer and expert-routing work, including consistent deferral estimators and multi-expert routing. It does **not** claim to invent expert arbitration. The defensible research contribution being tested is the GCD-specific combination of:
 
-```bash
-python -m deltasub.cli references inspect
-python -m deltasub.cli data prepare cub --root DATA --split-file SPLIT.json --archive CUB.tgz
-python -m deltasub.cli data prepare aircraft --root DATA --split-file SPLIT.pkl --archive AIRCRAFT.tar.gz
-python -m deltasub.cli data prepare cars --root DATA --source manual --split-file SPLIT.pkl --archive CARS.tgz
-python -m deltasub.cli data prepare cifar10 --root DATA --split-file SPLIT.json --archive CIFAR.tar.gz
-python -m deltasub.cli data prepare imagenet100 --root OUTPUT --imagenet-root IMAGENET \
-  --split-file SPLIT.json
-python -m deltasub.cli data validate cub --root DATA
-python -m deltasub.cli data validate-all --root DATASETS
-```
+1. a parametric cluster classifier and a transductive leave-one-out prototype classifier;
+2. class-disjoint regret distillation from labelled known classes;
+3. class-permutation-invariant decision-geometry features;
+4. disagreement-only routing;
+5. joint Old/New evaluation under the GCD Hungarian protocol.
 
-For ImageNet-100, `OUTPUT/splits/imagenet100_wnids.txt` must additionally contain the
-exact 100 unique WNIDs from the pinned split source. A local
-`source_archive.sha256` may be used where the licensed source is already extracted.
-No real dataset counts or checksums are claimed by this repository.
+No exact prior method with this complete mechanism was found in the papers checked for this implementation. That is a scoped novelty statement, not a proclamation that the literature has been exhaustively conquered.
 
-## CLI coverage
+## Primary references
 
-The currently exposed CLI surface is:
+- Vaze et al., **Generalized Category Discovery**, CVPR 2022: https://arxiv.org/abs/2201.02609
+- Wen et al., **Parametric Classification for Generalized Category Discovery: A Baseline Study**, ICCV 2023: https://arxiv.org/abs/2211.11727
+- Dai et al., **Adaptive Part Learning for Fine-Grained Generalized Category Discovery**, CVPR 2025: https://arxiv.org/abs/2507.06928
+- Zhang et al., **Less Attention is More: Prompt Transformer for Generalized Category Discovery**, CVPR 2025: https://openaccess.thecvf.com/content/CVPR2025/html/Zhang_Less_Attention_is_More_Prompt_Transformer_for_Generalized_Category_Discovery_CVPR_2025_paper.html
+- Cao et al., **AllGCD**, ICCV 2025: https://openaccess.thecvf.com/content/ICCV2025/html/Cao_AllGCD_Leveraging_All_Unlabeled_Data_for_Generalized_Category_Discovery_ICCV_2025_paper.html
+- Tang et al., **ConGCD**, ICCV 2025: https://arxiv.org/abs/2508.10731
+- Zhu et al., **Subtoken Vision Transformer for Fine-grained Recognition**, 2026: https://arxiv.org/abs/2607.09086
+- Mozannar and Sontag, **Consistent Estimators for Learning to Defer to an Expert**, ICML 2020: https://proceedings.mlr.press/v119/mozannar20b.html
+- Verma et al., **Learning to Defer to Multiple Experts**, AISTATS 2023: https://proceedings.mlr.press/v206/verma23a.html
+- Mao, Mohri, and Zhong, **Principled Learning-to-Defer Algorithms for Multiple Experts**, ICML 2025: https://proceedings.mlr.press/v267/mao25a.html
 
-```text
-doctor
-doctor memory
-smoke
-data download {aircraft,cub}
-data prepare {aircraft,cars,cifar10,cub,imagenet100}
-data validate {aircraft,cars,cifar10,cub,imagenet100}
-data validate-all
-references inspect
-backbone inspect
-selex verify-equivalence
-train baseline
-paper build-all
-```
+## Archived DeltaSub work
 
-Every command and nested `--help` path is covered by `tests/integration/test_cli.py`.
-Download dispatch is tested without downloading multi-gigabyte archives; official URLs
-and dataset checksums are exercised by the downloader when the user invokes it.
-
-The M2 baseline validates all inputs and trains unless `--validate-only` is supplied:
-
-```bash
-python -m deltasub.cli backbone inspect --name dinov2_vitb14 --checkpoint CHECKPOINT.pt \
-  --expected-sha256 SHA256 --source-root /path/to/pinned/dinov2
-python -m deltasub.cli selex verify-equivalence \
-  --output artifacts/gates/m2_selex_equivalence.json
-python -m deltasub.cli train baseline --config configs/experiment/cub_vit_selex.yaml \
-  --checkpoint CHECKPOINT.pt
-```
-
-The repository does not embed or automatically download the official checkpoint because
-an expected checkpoint SHA256 has not been independently pinned here. Supply the official
-file and its SHA256 in the resolved experiment configuration. The adapter never falls
-back to random weights.
-
-M4 gain collection is exposed under `gains`; M5 router, M6 adaptive execution, and M7
-SubViT diagnostics have dedicated command groups. M9 adds the production baseline,
-DeltaSub staged runner, exact pinned GCD-v2 evaluation, and campaign aggregation.
-
-## M9 production experiments
-
-The GCD-v2 evaluator is an exact port of
-`project_utils/cluster_and_log_utils.py:split_cluster_acc_v2` at GCD revision
-`831a645c3d09a68ec4633a45741025765bacf7e0`. It builds one global contingency matrix,
-uses SciPy's Hungarian assignment once over all samples, and reports All, Old, and New
-accuracy under that same mapping as fractions in `[0,1]`. Empty partitions, overlapping
-class partitions, negative/non-integral/non-finite labels, inconsistent lengths, and
-protocols other than `gcd_v2` fail closed. Reference hashes and the implementation hash
-are available through `deltasub.evaluation.gcd_v2.provenance()`.
-
-The frozen baseline trains only a linear 768-to-class head over strict-loaded official
-DINOv2 ViT-B/14 CLS features. DeltaSub runs the existing M4 paired gain collector, emits
-the exact M5 parent-feature cache, trains the M5 router, then trains the M3 child
-projector, detail-mode positions, and classification head while keeping DINOv2 and the
-router frozen. It retains all 256 parents and adds three Haar details for each of K=16
-selected parents. Unlabelled ground-truth targets are replaced with `-1` at the training
-dataset boundary; detached model predictions supply pseudo-labels. Test labels enter
-only final evaluation.
-
-Commands are intentionally one run per process:
-
-```bash
-python -m deltasub.cli experiment preflight --config configs/publication/core.yaml
-python -m deltasub.cli experiment run --config configs/publication/core.yaml --dataset cub --method baseline --seed 0 --resume
-python -m deltasub.cli experiment run --config configs/publication/core.yaml --dataset cub --method deltasub --seed 0 --resume
-python -m deltasub.cli experiment status --config configs/publication/core.yaml
-python -m deltasub.cli experiment aggregate --config configs/publication/core.yaml
-```
-
-Diagnostic runs use `configs/diagnostic/{cub,aircraft}_seed0.yaml` and write beneath
-`artifacts/diagnostic/m9/<dataset>/seed_0/`. The bounded diagnostic uses 20 baseline
-epochs, four candidates over at most 512 gain samples, 10 router epochs, 10 adaptive
-epochs, and fixed K=16. Core/full configs use seeds 0/1/2 and full 256-candidate gain
-collection. Checkpoints contain optimizer, scheduler, RNG, loader-generator, epoch, and
-global-step state and reject incompatible resumes. Cars is always `not_run` with reason
-`dataset unavailable by user choice`. No diagnostic, core, or full run has been executed,
-so there are no benchmark claims.
-
-## M3 direct Haar subtokens
-
-M3 exposes an exact, differentiable token-geometry foundation:
-
-- A `[B,3,224,224]` image becomes 256 row-major 14×14 parents, indexed
-  `row * 16 + column`, with an exact inverse.
-- Each parent is split directly from pixels into `[TL, TR, BL, BR]` 7×7 children.
-- Official DINOv2 projection quadrants initialize each child as
-  `4 * linear(child, W_quadrant) + parent_bias`; the loaded parent projection is not
-  mutated.
-- `c_q = r_q - mean_q(r_q) + p` preserves gradients and enforces the original parent
-  token as the child mean within the active dtype's arithmetic.
-- The fixed detail matrix is
-  `0.5 * [[1,-1,1,-1], [1,1,-1,-1], [1,-1,-1,1]]`, ordered horizontal,
-  vertical, diagonal. The parent is retained, so no redundant low-pass token is added.
-- A detail position is its exact parent position plus one zero-initialized learned mode
-  embedding. CLS and register handling remains unchanged.
-- Sequences contain prefixes, all 256 parents, then selected details by ascending parent
-  and mode. A supplied mask selecting K parents adds exactly `3K` valid tokens;
-  heterogeneous batches use deterministic right padding and `-1` metadata sentinels.
-
-Run the non-reportable CPU fixture:
-
-```bash
-python -m deltasub.cli subtokens validate --config configs/smoke/m3_subtokens.yaml
-```
-
-`configs/subtokens/haar_direct.yaml` records the production geometry. M3 does not choose
-the supplied mask and implements no scores, gains, router, replay, or adaptive budget.
-Those remain later milestones; no real benchmark training is launched by this command.
-
-## M4 deterministic counterfactual gains
-
-For anchor `i` and parent patch `j`, M4 stores:
-
-```text
-gain(i,j) = per_anchor_loss_base(i) - per_anchor_loss_counterfactual(i,j)
-```
-
-Positive means the three M3 Haar detail tokens reduced anchor `i`'s SelEx loss. The
-counterfactual keeps the same two materialized views, ordered batch, labels/masks,
-hierarchy, pseudo-label confidence, confusion factors, weights, precision, and RNG
-context. It retains the original parent and changes no other sample or parent. Because
-SelEx couples the batch, the record stores both the anchor gain and separate scalar
-batch/non-anchor spillover changes; spillover is not the router label.
-
-The batch-context key hashes ordered sample/view IDs, image content, deterministic
-augmentation seeds/parameters, every SelEx context tensor, model/projector/head state,
-configuration, precision/device/mode, source commit, and provenance. The cache ID is the
-SHA256 of canonical immutable cache metadata, including its set of batch-context hashes.
-Records are ordered by batch, anchor position, then ascending parent index. Resume
-verifies metadata, explicit Parquet schemas, shard hashes, record keys, and invariants;
-temporary shards are ignored safely and incompatible/corrupt caches fail closed.
-
-## M6 deterministic adaptive execution
-
-M6 adds the production foundation under `deltasub.adaptive`. The router scores all 256
-parents before the transformer. Every parent remains; choosing `K` distinct parents adds
-exactly `3K` M3 details. The transformer sequence is:
-
-```text
-prefix tokens | 256 row-major parent tokens | score-ranked selected Haar details
-```
-
-Parents are ranked by descending score, with exact ties resolved by ascending parent
-index using an explicit backend-independent lexicographic policy. Each parent contributes
-horizontal, vertical, then diagonal detail. Hard selection runs without gradients; M6
-does not claim differentiable router fine-tuning.
-
-Budget fields name their units explicitly:
-
-```text
-selected_parents = K
-added_detail_tokens = 3K
-spatial_tokens = 256 + 3K
-total_tokens = prefix_tokens + 256 + 3K
-```
-
-Controllers support fixed K, threshold with K bounds, and dual threshold. Positive
-violation means realized training usage exceeds target usage:
-
-```text
-lambda_next = clamp(lambda + dual_lr * (realized_usage - target_usage),
-                    lambda_min, lambda_max)
-```
-
-Only successful training optimizer steps accumulate usage, and validation/inference
-never updates lambda. Padded execution uses validity masks; exact-length or configured
-length buckets execute separately and restore original order. Accounting distinguishes
-effective tokens from padded execution and router multiply-add estimates. Token counts
-are not reported as FLOPs or wall-clock savings.
-
-Run the synthetic, diagnostic, non-reportable fixture:
-
-```bash
-python -m deltasub.cli adaptive fixture --output artifacts/adaptive/m6_fixture
-python -m deltasub.cli adaptive fixture --output artifacts/adaptive/m6_fixture --resume
-```
-
-Configuration/checkpoint inspection is available through `adaptive validate` and
-`adaptive inspect`. `configs/adaptive/cub_m6.yaml` is a provenance-guarded production
-template only; it does not download data or checkpoints. No real benchmark result was
-produced. This paragraph describes the earlier M6 milestone; M7 and M8 were subsequently
-implemented as synthetic diagnostic infrastructure only.
-Invalid anchors are stored with `anchor_valid: false`; their finite diagnostic arithmetic
-must not be treated as a valid label.
-
-CLI:
-
-```bash
-python -m deltasub.cli gains collect --config configs/smoke/m4_gains.yaml
-python -m deltasub.cli gains validate artifacts/gains/CACHE_ID
-python -m deltasub.cli gains inspect artifacts/gains/CACHE_ID
-python -m deltasub.cli gains collect --config configs/gains/cub_m4.yaml \
-  --checkpoint CHECKPOINT.pth --expected-sha256 SHA256 \
-  --source-root /path/to/pinned/dinov2 --resume
-```
-
-The smoke configuration runs a tiny explicitly test-only transformer while exercising
-the real M3 token and exact M2 loss paths. Its outputs are labelled synthetic,
-diagnostic, and non-reportable. Production validation rejects missing hashes, implicit
-devices, test models, malformed candidate sets, and failed M1/M2/M3 provenance. A real
-collection additionally requires a materialized deterministic two-view provider and
-the exact M2 projection-head checkpoint; these are never inferred. M5 has not started:
-there is no router command, replay buffer use, or learned candidate policy.
-
-## M2 SelEx equivalence
-
-The production loss is checked against an isolated minimal executable snapshot of the
-MIT-licensed SelEx source at commit
-`569ee7085e779999502bd73ea92240f3d32fc84d`,
-`methods/contrastive_training/contrastive_training.py`: two-view concatenation,
-Euclidean InfoNCE, confusion-factor soft targets, labelled `SupConLoss`, dimension-sliced
-hierarchical pseudo-label terms, power-of-two weights, and the final supervised mixing
-factor. Tests execute that attributed reference snapshot directly. The hash-bound gate
-is freshly re-executed by baseline validation.
-Labelled subset contributions are denominator-scaled so the mean of the
-batch-length per-anchor vector exactly recovers the upstream subset mean.
-
-No CUB, Aircraft, Cars, CIFAR-10, or ImageNet-100 training or evaluation was launched in
-M2, and no synthetic value is reported as a benchmark result.
-
-## M8 common baseline adapters
-
-`deltasub.baselines` provides the strict M8 adapter/result contract. Every current
-adapter is `fixture_only`; production execution fails closed without real provenance.
-
-```bash
-python -m deltasub.cli baselines list
-python -m deltasub.cli baselines validate
-python -m deltasub.cli baselines fixture --output artifacts/baselines/m8_fixture
-python -m deltasub.cli baselines compare --output artifacts/baselines/m8_comparison.json
-```
-
-The fixture compares identical synthetic inputs and records effective/padded lengths,
-approximate attention-token pairs, plan/frozen-state hashes, and deterministic execution
-errors. Selected regions, added/retained/removed tokens, sequence lengths, approximate
-cost, and measured latency remain distinct. No adapter silently falls back to ViT.
-No real benchmark ran and M9 remains incomplete.
-
-## Scientific execution order
-
-Follow `PLAN.md`: implement and pass M1–M4 gates, run CUB seed 0, warm up detail tokens,
-collect a small deterministic M=4 gain cache, run the full-patch audit, and write the
-decisive diagnostic. Core and full tiers must remain blocked unless the diagnostic is
-positive. Original-protocol numbers must never be combined with common-protocol results.
+DeltaSub code and artifacts remain in the repository for reproducibility. Its final information-gain selector failed for every tested token budget, and its prototype-conditional selector also failed against the prototype-only control. Those results motivate RegretGCD but do not count as RegretGCD ablations. No further DeltaSub selector experiments are authorized.
