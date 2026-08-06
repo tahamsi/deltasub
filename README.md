@@ -18,7 +18,7 @@ Gate 0 established that the two experts are genuinely complementary on CUB seed 
 
 The oracle improves H-mean by **7.5663 points** over the prototype expert, with a paired-bootstrap interval of **[5.2441, 10.6763] points**. The parametric expert is uniquely correct on 443 samples and the prototype expert on 444 samples. Gate 0 uses test labels and is **only an upper-bound diagnostic**. It is not a deployable method and is never reported as RegretGCD performance.
 
-Gate 1, implemented here, trains a router using only genuinely labelled training examples from known classes and evaluates once on the test set. No Gate-1 result is claimed until `artifacts/regretgcd/cub/seed_0/result.json` exists.
+**Final Gate-1 result: ABANDON.** The labelled known-class unique-winner set contained only one expert outcome. Consequently, the binary regret target was not identifiable without fabricating supervision or using test labels. The router was not fitted, no deployable RegretGCD performance is claimed, and no multi-seed or Aircraft experiments are authorized. Exact diagnostics are stored in `artifacts/regretgcd/cub/seed_0/result.json`.
 
 ## Problem formulation
 

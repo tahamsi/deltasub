@@ -43,6 +43,7 @@ from deltasub.regretgcd import (
     known_centroid_scores,
     normalize_rows,
     random_matched_switch,
+    regret_labels,
     route_predictions,
 )
 from deltasub.utils.hashing import sha256_file
@@ -444,6 +445,98 @@ def run(args: argparse.Namespace) -> None:
 
     train_target = train_data["target"].astype(np.int64)
     mapping = hungarian_mapping(train_router.parametric_prediction, train_target)
+
+    regret_target, unique_winner, _, _ = regret_labels(
+        train_router.parametric_prediction,
+        train_router.prototype_prediction,
+        train_target,
+        mapping,
+    )
+    prototype_wins = int(regret_target[unique_winner].sum())
+    parametric_wins = int(unique_winner.sum() - prototype_wins)
+
+    if prototype_wins == 0 or parametric_wins == 0:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+        result = {
+            "schema_version": SCHEMA,
+            "status": "completed",
+            "dataset": config["dataset"],
+            "seed": seed,
+            "method": "RegretGCD",
+            "gate": "failed",
+            "verdict": "abandon",
+            "failure_reason": "single_class_unique_winner_supervision",
+            "failure_explanation": (
+                "The labelled known-class unique-winner set contains only one "
+                "expert outcome, so the binary regret target is not identifiable "
+                "without synthetic supervision or test-label leakage."
+            ),
+            "test_labels_used_for_router_training": False,
+            "test_labels_used_for_threshold_selection": False,
+            "transductive_unlabelled_test_features_used": True,
+            "class_holdout_router": True,
+            "router_diagnostics": {
+                "unique_winners": int(unique_winner.sum()),
+                "prototype_wins": prototype_wins,
+                "parametric_wins": parametric_wins,
+                "winner_classes_present": int(
+                    len(np.unique(regret_target[unique_winner]))
+                ),
+                "oof_auc": None,
+                "router_fitted": False,
+            },
+            "gate0_metrics": gate0_result.get("metrics", {}),
+            "next_stage_if_continue": None,
+            "cars": {
+                "status": "not_run",
+                "reason": "dataset unavailable by user choice",
+            },
+            "source": {
+                "prototype_archive": str(source_archive_path),
+                "prototype_archive_sha256": sha256_file(source_archive_path),
+                "prototype_result": str(source_result_path),
+                "prototype_result_sha256": sha256_file(source_result_path),
+                "gate0_result": str(gate0_result_path),
+                "gate0_result_sha256": sha256_file(gate0_result_path),
+                "gate0_verdict": gate0_result.get("verdict"),
+                "matched_baseline_result": provenance["result"],
+                "matched_baseline_checkpoint": provenance["checkpoint"],
+                "matched_baseline_checkpoint_sha256": provenance[
+                    "checkpoint_sha256"
+                ],
+            },
+            "provenance": {
+                "repository_commit": commit,
+                "config": str(args.config),
+                "config_sha256": sha256_file(args.config),
+                "python": platform.python_version(),
+                "torch": str(torch.__version__),
+                "cuda": str(torch.version.cuda),
+                "device": torch.cuda.get_device_name(),
+            },
+            "runtime_seconds": time.perf_counter() - started,
+            "peak_cuda_memory_bytes": int(torch.cuda.max_memory_allocated()),
+        }
+        _atomic_json(result_path, result)
+
+        print()
+        print("===== REGRETGCD GATE 1: IDENTIFIABILITY CHECK =====")
+        print(f"unique winners  : {int(unique_winner.sum())}")
+        print(f"parametric wins : {parametric_wins}")
+        print(f"prototype wins  : {prototype_wins}")
+        print("router fitted   : no")
+        print()
+        print("REGRETGCD GATE-1 VERDICT: ABANDON")
+        print("reason: single-class unique-winner supervision")
+        print("result:", result_path)
+        return
+
     folds = int(config["router"]["folds"])
     feature_sets = {
         "regretgcd": feature_indices(
